@@ -69,3 +69,6 @@ class ChessEdge(NamedTuple):
 
     def to_1d(self) -> Tuple[int, int]:
         return self.from_square.to_1d(), self.to_square.to_1d()
+
+    def __eq__(self, other: "ChessEdge") -> bool:
+        return self.from_square == other.from_square and self.to_square == other.to_square

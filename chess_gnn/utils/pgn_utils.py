@@ -86,3 +86,7 @@ class PGNBoardHelper:
 
     def result(self) -> int:
         return self.result_mapping[self.game.headers['Result']]
+
+
+def process_board_string(board: str) -> str:
+    return str(board).replace('\n', ' ').replace(" ", "")

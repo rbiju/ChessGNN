@@ -21,7 +21,7 @@ class BERTLossWeights(NamedTuple):
 
 
 @HydraConfigurable
-class ChessBERTTransformer(pl.LightningModule):
+class ChessBERT(pl.LightningModule):
     def __init__(self, num_layers: int,
                  block: TransformerBlock,
                  masking_loss: nn.Module,

@@ -23,12 +23,9 @@ def get_legal_move_edges(board: Board) -> List[ChessEdge]:
     return [ChessEdge.from_move(move) for move in board.legal_moves]
 
 
-def get_edge_set_single(idx, board) -> EdgeSet:
-    adjacent_edges = get_adjacency_edges(idx)
-    legal_edges = get_legal_move_edges(board)
-
-    legal_set = set(legal_edges)
-    adjacent_set = set(adjacent_edges)
+def merge_edges(adjacent: List[ChessEdge], legal: List[ChessEdge]) -> EdgeSet:
+    legal_set = set(legal)
+    adjacent_set = set(adjacent)
     adjacent_set = adjacent_set - legal_set
 
     return EdgeSet(legal=list(legal_set), adjacent=list(adjacent_set))
