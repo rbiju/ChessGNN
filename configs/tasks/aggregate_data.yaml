@@ -1,0 +1,5 @@
+AggregateData:
+  _target_: chess_gnn.tasks.AggregateData
+  aggregator:
+    _target_: chess_gnn.data_creation.BERTLichessDataAggregator
+    data_location: '/Users/ray/Datasets/txt/test'

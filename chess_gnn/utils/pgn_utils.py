@@ -1,9 +1,8 @@
 from abc import ABC, abstractmethod
-from typing import Generator, Optional
+from typing import Optional, Generator
 from pathlib import Path
 
 import chess.pgn
-from chess import Board
 
 SITE_PREFIXES = {"lichess": 'https://lichess.org/'}
 
@@ -13,21 +12,45 @@ class ChessBoardGetter(ABC):
         self.file = str(file)
 
     @abstractmethod
-    def get_board_strings(self) -> Generator[str, None, None]:
-        raise NotImplementedError
-
-    @abstractmethod
-    def get_unique_game_identifier(self) -> str:
-        raise NotImplementedError
-
-    @abstractmethod
-    def result(self) -> int:
+    def process_game_at_offset(self, offset: int) -> Optional[tuple[int, str, list[str]]]:
         raise NotImplementedError
 
 
 class LichessChessBoardGetter(ChessBoardGetter):
+    def __init__(self, pgn_file: Path, mode: str = 'lichess'):
+        super().__init__(pgn_file)
+        self.prefix = SITE_PREFIXES[mode]
+        self.result_mapping = {'1-0': 0, '0-1': 1, '1/2-1/2': 2}
+
+    @staticmethod
+    def process_board_string(board: str) -> str:
+        return str(board).replace('\n', ' ').replace(" ", "")
+
+    def process_game_at_offset(self, offset: int) -> Optional[tuple[int, str, list[str]]]:
+        with open(self.file, encoding='utf-8') as f:
+            f.seek(offset)
+            game = chess.pgn.read_game(f)
+            if game is None or 'Result' not in game.headers or 'Site' not in game.headers:
+                return None
+
+            site = game.headers["Site"]
+            identifier = site.removeprefix(self.prefix)
+            result = self.result_mapping.get(game.headers['Result'])
+            if result is None:
+                return None
+
+            board = game.board()
+            positions = []
+            for move in game.mainline_moves():
+                board.push(move)
+                positions.append(self.process_board_string(str(board)))
+
+            return result, identifier, positions
+
+
+class PGNBoardHelper:
     def __init__(self, file: Path, mode: str = 'lichess'):
-        super().__init__(file)
+        self.file = file
         if mode not in SITE_PREFIXES.keys():
             raise ValueError(f'Invalid mode: {mode}')
 

@@ -1,25 +1,13 @@
 from pathlib import Path
+import time
 
 import torch
 
 from converter.pgn_data import PGNData
 
 from chess_gnn.tokenizers import SimpleChessTokenizer
-from chess_gnn.utils.pgn_utils import LichessChessBoardGetter
 from chess_gnn.utils import ChessPoint
 from chess_gnn.data_creation.bert import BERTLichessDatasetCreator
-
-
-def get_chess_board():
-    file = '/Users/ray/Datasets/chess/test.pgn'
-    board_getter = LichessChessBoardGetter(Path(file))
-    board_getter.get_game()
-    game = board_getter.game
-    board = game.board()
-
-    print(str(board).replace('\n', ' ').replace(" ", ""))
-
-    return board
 
 
 def create_adjacent_edges():
@@ -31,7 +19,7 @@ def create_adjacent_edges():
     return adjacent_edges
 
 
-def write_dataset_to_txt():
+def write_pgn_to_txt():
     dataset_creator = BERTLichessDatasetCreator(pgn_file=Path('/Users/ray/Datasets/chess/test.pgn'),
                                                 data_directory=Path('/Users/ray/Datasets/txt/test'))
 
@@ -61,4 +49,8 @@ def test_tokenizer():
 
 
 if __name__ == "__main__":
-    test_tokenizer()
+    start = time.time()
+    write_pgn_to_txt()
+    end = time.time()
+
+    print(f"Dataset creation time: {end - start}")
