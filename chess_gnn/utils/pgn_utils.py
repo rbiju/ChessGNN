@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Generator
+from typing import Generator, Optional
 from pathlib import Path
 
 import chess.pgn
@@ -33,7 +33,7 @@ class LichessChessBoardGetter(ChessBoardGetter):
 
         self.prefix = SITE_PREFIXES[mode]
         self.pgn = open(self.file, encoding="utf-8")
-        self.game = None
+        self.game: Optional[chess.pgn.Game] = None
         self.eof = False
 
         self.result_mapping = {'1-0': 0,

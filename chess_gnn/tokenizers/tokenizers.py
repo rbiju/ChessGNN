@@ -1,12 +1,15 @@
-from .base import ChessTokenizer
+from typing import Optional
+
+import torch
 from torch import Tensor
-import torch.nn.functional as F
+
+from .base import ChessTokenizer
 
 
-class OneHotChessTokenizer(ChessTokenizer):
-    def __init__(self, board_str: str):
+class SimpleChessTokenizer(ChessTokenizer):
+    def __init__(self, board_str: Optional[str] = None):
         super().__init__(board_str)
 
     def tokenize(self, board_str: str) -> Tensor:
         seq_idxs = [self.inverse_vocab[token] for token in board_str]
-        return F.one_hot(Tensor(seq_idxs), self.vocab_size)
+        return torch.tensor(seq_idxs, dtype=torch.long)

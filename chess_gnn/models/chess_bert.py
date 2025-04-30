@@ -20,6 +20,7 @@ class BERTLossWeights(NamedTuple):
     win_prediction: float = 1.0
 
 
+@HydraConfigurable
 class ChessBERTTransformer(pl.LightningModule):
     def __init__(self, num_layers: int,
                  block: TransformerBlock,
@@ -41,11 +42,14 @@ class ChessBERTTransformer(pl.LightningModule):
         self.mask_token = torch.zeros(block.dim)
         self.cls_token = torch.zeros(1, block.dim)
 
+        self.embedding_table = torch.nn.Parameter(torch.rand(tokenizer.vocab_size, 32))
+
         self.initialize_weights()
 
     def initialize_weights(self):
         torch.nn.init.trunc_normal_(self.cls_token, std=0.02)
         torch.nn.init.trunc_normal_(self.mask_token, std=0.02)
+        torch.nn.init.trunc_normal_(self.embedding_table, std=0.02)
         self.apply(self._init_weights)
 
     @staticmethod

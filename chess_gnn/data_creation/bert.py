@@ -1,4 +1,5 @@
 import os
+import random
 from pathlib import Path
 
 from chess_gnn.utils import LichessChessBoardGetter
@@ -27,3 +28,28 @@ class BERTLichessDatasetCreator:
             with open(file_path, "w", encoding="utf-8") as f:
                 for text in self.board_getter.get_board_strings():
                     f.write(text + "\n")
+
+
+class BERTLichessDataAggregator:
+    def __init__(self, data_location: Path):
+        self.data_location = data_location
+        self.file_name = Path('aggregated_data.txt')
+        self.label_folders = os.listdir(self.data_location)
+
+        self.file_paths = []
+        for dir_name in self.label_folders:
+            full_dir = os.path.abspath(dir_name)
+            for fname in os.listdir(full_dir):
+                fpath = os.path.join(full_dir, fname)
+                if os.path.isfile(fpath) and fname.endswith('.txt'):
+                    self.file_paths.append((fpath, dir_name))
+
+        random.shuffle(self.file_paths)
+
+    def aggregate_data(self) -> None:
+        with open(self.data_location / self.file_name, 'w', encoding='utf-8') as out_f:
+            for fpath, label in self.file_paths:
+                with open(fpath, 'r', encoding='utf-8') as in_f:
+                    for line in in_f:
+                        line = line.rstrip('\n')
+                        out_f.write(f"{line} {label}\n")

@@ -1,14 +1,20 @@
 from pathlib import Path
+
+import torch
+
+from converter.pgn_data import PGNData
+
+from chess_gnn.tokenizers import SimpleChessTokenizer
 from chess_gnn.utils.pgn_utils import LichessChessBoardGetter
 from chess_gnn.utils import ChessPoint
 from chess_gnn.data_creation.bert import BERTLichessDatasetCreator
 
 
 def get_chess_board():
-    file = '/Users/ray/Datasets/lichess_db_standard_rated_2013-01.pgn'
+    file = '/Users/ray/Datasets/chess/test.pgn'
     board_getter = LichessChessBoardGetter(Path(file))
     board_getter.get_game()
-    game = board_getter.game()
+    game = board_getter.game
     board = game.board()
 
     print(str(board).replace('\n', ' ').replace(" ", ""))
@@ -26,10 +32,33 @@ def create_adjacent_edges():
 
 
 def write_dataset_to_txt():
-    dataset_creator = BERTLichessDatasetCreator(pgn_file=Path('/Users/ray/Datasets/test.pgn'),
+    dataset_creator = BERTLichessDatasetCreator(pgn_file=Path('/Users/ray/Datasets/chess/test.pgn'),
                                                 data_directory=Path('/Users/ray/Datasets/txt/test'))
 
     dataset_creator.create_dataset()
 
+
+def generate_df():
+    data = PGNData('/Users/ray/Datasets/test.pgn',
+                   file_name='/Users/ray/Datasets/test')
+    result = data.export()
+
+    games_df = result.get_games_df()
+
+    return games_df
+
+
+def test_tokenizer():
+    tokenizer = SimpleChessTokenizer()
+
+    tokens = tokenizer.tokenize('r..q.rk.pp..bppp.np.bp.........Q...P.....BP.BN..PP...PPPR...K..R')
+
+    embeddings = torch.nn.Parameter(torch.rand(tokenizer.vocab_size, 32))
+
+    seq = torch.index_select(input=embeddings, dim=0, index=tokens)
+
+    return seq
+
+
 if __name__ == "__main__":
-    write_dataset_to_txt()
+    test_tokenizer()
