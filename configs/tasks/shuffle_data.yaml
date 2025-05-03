@@ -1,0 +1,5 @@
+ShuffleData:
+  _target_: chess_gnn.tasks.ShuffleData
+  shuffler:
+    _target_: chess_gnn.data_creation.BERTLichessDataShuffler
+    input_file: '/Users/ray/Datasets/txt/test/aggregated_data.txt'

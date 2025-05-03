@@ -22,11 +22,12 @@ class TransformerBlock(nn.Module):
         self.dim = hidden
         self.attention = MultiHeadedAttention(h=attn_heads, d_model=hidden)
         self.feed_forward = PositionwiseFeedForward(d_model=hidden, d_ff=feed_forward_hidden, dropout=dropout)
-        self.input_sublayer = SublayerConnection(dropout=dropout, norm_factory=norm_factory)
-        self.output_sublayer = SublayerConnection(dropout=dropout, norm_factory=norm_factory)
+        norm = norm_factory.norm(hidden)
+        self.input_sublayer = SublayerConnection(dropout=dropout, norm=norm)
+        self.output_sublayer = SublayerConnection(dropout=dropout, norm=norm)
         self.dropout = nn.Dropout(p=dropout)
 
-    def forward(self, x, mask):
+    def forward(self, x, mask=None):
         x = self.input_sublayer(x, lambda _x: self.attention.forward(_x, _x, _x, mask=mask))
         x = self.output_sublayer(x, self.feed_forward)
         return self.dropout(x)

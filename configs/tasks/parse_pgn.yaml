@@ -1,0 +1,11 @@
+ParsePgn:
+  _target_: chess_gnn.tasks.ParsePgn
+  parser:
+    _target_: chess_gnn.data_creation.BERTLichessDatasetCreator
+    pgn_file: '/Users/ray/Datasets/chess/test.pgn'
+    data_directory: '/Users/ray/Datasets/txt/test'
+    split:
+      _target_: chess_gnn.data_creation.Split
+      train: 0.8
+      val: 0.1
+      test: 0.1

@@ -1,0 +1,47 @@
+BERTTrain:
+  _target_: chess_gnn.tasks.BERTTrain
+  model:
+    _target_: chess_gnn.models.ChessBERT
+    num_layers: 24
+    block:
+      _target_: chess_gnn.bert.TransformerBlock
+      hidden: 256
+      attn_heads: 16
+      feed_forward_hidden: 512
+      norm_factory:
+        _target_: chess_gnn.bert.utils.DyTNormFactory
+    tokenizer:
+      _target_: chess_gnn.tokenizers.SimpleChessTokenizer
+    mask_handler:
+      _target_: chess_gnn.bert.BERTMaskHandler
+    optimizer_factory:
+      _target_: chess_gnn.optimizers.LambFactory
+      learning_rate: 1e-3
+      weight_decay: 1e-4
+    lr_scheduler_factory:
+      _target_: chess_gnn.lr_schedules.CosineAnnealingWarmupFactory
+      T_max: 50
+      warmup_epochs: 4
+    loss_weights:
+      _target_: chess_gnn.models.BERTLossWeights
+      masking: 1.0
+      win_prediction: 1.0
+  datamodule:
+    _target_: chess_gnn.data.BERTDataModule
+    data_directory: '/Users/ray/Datasets/txt/test'
+    batch_size: 64
+    num_workers: 8
+  trainer:
+    _target_: pytorch_lightning.Trainer
+    max_epochs: 10
+    accelerator: 'mps'
+    strategy: 'ddp'
+    devices: 1
+    precision: 'bf16-mixed'
+    check_val_every_n_epoch: 5
+    num_sanity_val_steps: 2
+    logger:
+      _target_: pytorch_lightning.loggers.TensorBoardLogger
+      save_dir: '/Users/ray/Tensorboard/chess_bert'
+    callbacks:
+      - _target_: pytorch_lightning.callbacks.TQDMProgressBar

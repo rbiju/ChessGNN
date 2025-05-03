@@ -5,25 +5,25 @@ from .dyt import DyTNorm
 
 
 class NormFactory(ABC):
-    def __init__(self, size):
-        self.size = size
+    def __init__(self):
+        pass
 
     @abstractmethod
-    def norm(self) -> nn.Module:
+    def norm(self, size: int) -> nn.Module:
         raise NotImplementedError
 
 
 class LayerNormFactory(NormFactory):
-    def __init__(self, size):
-        super().__init__(size)
+    def __init__(self):
+        super().__init__()
 
-    def norm(self) -> nn.Module:
-        return nn.LayerNorm(self.size)
+    def norm(self, size: int) -> nn.Module:
+        return nn.LayerNorm(size)
 
 
 class DyTNormFactory(NormFactory):
-    def __init__(self, size):
-        super().__init__(size)
+    def __init__(self):
+        super().__init__()
 
-    def norm(self) -> nn.Module:
-        return DyTNorm(self.size)
+    def norm(self, size: int) -> nn.Module:
+        return DyTNorm(size)

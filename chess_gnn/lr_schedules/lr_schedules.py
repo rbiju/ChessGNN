@@ -25,7 +25,6 @@ class LRSchedulerFactory(ABC):
         """
         raise NotImplementedError
 
-    @abstractmethod
     def scheduler_config(self, scheduler):
         """
 
@@ -59,10 +58,16 @@ class LRSchedulerFactory(ABC):
             }
         """
 
-        raise NotImplementedError
+        return {
+            "lr_scheduler": {
+                "scheduler": scheduler,
+                "interval": self.interval,
+                "frequency": self.frequency
+            }
+        }
 
 
-class NaginiStepLR(LRSchedulerFactory):
+class StepLR(LRSchedulerFactory):
     def __init__(self,
                  step_size: int,
                  frequency: int,
@@ -81,11 +86,32 @@ class NaginiStepLR(LRSchedulerFactory):
                                                     last_epoch=self.last_epoch)
         return scheduler
 
-    def scheduler_config(self, scheduler):
-        return {
-            "lr_scheduler": {
-                "scheduler": scheduler,
-                "interval": self.interval,
-                "frequency": self.frequency
-            }
-        }
+
+class CosineAnnealingWarmupFactory(LRSchedulerFactory):
+    def __init__(self,
+                 T_max: int,
+                 warmup_epochs: int,
+                 eta_min: float = 1e-6,
+                 interval: str = 'epoch',
+                 last_epoch: int = -1):
+        super().__init__(interval=interval)
+        self.T_max = T_max
+        self.eta_min = eta_min
+        self.last_epoch = last_epoch
+
+        self.warmup_epochs = warmup_epochs
+
+    def scheduler(self, optimizer: Optimizer):
+        cosine = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer=optimizer,
+                                                            T_max=self.T_max,
+                                                            eta_min=self.eta_min,
+                                                            last_epoch=self.last_epoch)
+        warmup = torch.optim.lr_scheduler.LinearLR(optimizer=optimizer,
+                                                   start_factor=0.001,
+                                                   end_factor=1.0,
+                                                   total_iters=self.warmup_epochs)
+
+        scheduler = torch.optim.lr_scheduler.SequentialLR(optimizer=optimizer,
+                                                          schedulers=[warmup, cosine],
+                                                          milestones=[self.warmup_epochs])
+        return scheduler

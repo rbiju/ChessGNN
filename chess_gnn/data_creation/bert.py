@@ -1,3 +1,4 @@
+from dataclasses import asdict
 import os
 from pathlib import Path
 import random
@@ -5,22 +6,28 @@ import random
 import multiprocessing
 from threading import Thread
 from queue import Queue
-
-import chess.pgn
+from tqdm import tqdm
 
 from chess_gnn.utils import LichessChessBoardGetter
+from .utils import Split
 
 
 class BERTLichessDatasetCreator:
-    def __init__(self, pgn_file: Path, data_directory: Path, num_workers: int = None):
-        self.pgn_file = pgn_file
-        self.data_directory = data_directory
-        self.board_getter = LichessChessBoardGetter(pgn_file)
+    def __init__(self, pgn_file: str,
+                 data_directory: str,
+                 split: Split = Split(),
+                 seed: int = 42, num_workers: int = None):
+        self.pgn_file = Path(pgn_file)
+        self.data_directory = Path(data_directory)
+        self.board_getter = LichessChessBoardGetter(self.pgn_file)
+        self.random_seed = seed
+        self.split = split
         self.num_workers = multiprocessing.cpu_count() if num_workers is None else num_workers
 
         os.makedirs(data_directory, exist_ok=True)
-        for state in self.board_getter.result_mapping.values():
-            os.makedirs(data_directory / str(state), exist_ok=True)
+        for split in asdict(self.split).keys():
+            for state in self.board_getter.result_mapping.values():
+                os.makedirs(self.data_directory / split / str(state), exist_ok=True)
 
     def _get_game_offsets(self) -> list[int]:
         offsets = []
@@ -35,8 +42,18 @@ class BERTLichessDatasetCreator:
                 offset = f.tell()
         return offsets
 
-    def _write_game(self, result: int, identifier: str, positions: list[str]):
-        file_path = self.data_directory / str(result) / f"{identifier}.txt"
+    def _choose_split(self, offset: int) -> str:
+        rng = random.Random(f"{self.random_seed}_{offset}")
+        val = rng.random()
+        if val < self.split.train:
+            return 'train'
+        elif val < self.split.train + self.split.val:
+            return 'val'
+        else:
+            return 'test'
+
+    def _write_game(self, result: int, identifier: str, positions: list[str], split: str):
+        file_path = self.data_directory / split / str(result) / f"{identifier}.txt"
         if file_path.exists():
             return
         with open(file_path, "w", encoding="utf-8") as f:
@@ -45,19 +62,28 @@ class BERTLichessDatasetCreator:
 
     def _process_offset(self, offset: int):
         parsed = self.board_getter.process_game_at_offset(offset)
+        split = self._choose_split(offset)
         if parsed:
-            self._write_game(*parsed)
+            self._write_game(*parsed, split=split)
 
     def create_dataset(self):
         offsets = self._get_game_offsets()
         with multiprocessing.Pool(processes=self.num_workers) as pool:
-            pool.map(self._process_offset, offsets)
+            for _ in tqdm(pool.imap_unordered(self._process_offset, offsets), total=len(offsets),
+                          desc="Processing games"):
+                pass
+
+        return [self.data_directory / split for split in asdict(self.split).keys()]
 
 
 class BERTLichessDataAggregator:
-    def __init__(self, data_location: str):
+    def __init__(self, data_location: str, include_draw: bool = False):
         self.data_location = Path(data_location)
-        self.output_path = self.data_location / 'aggregated_data.txt'
+        self.include_draw = include_draw
+        if include_draw:
+            self.output_path = self.data_location / 'aggregated_data_with_draws.txt'
+        else:
+            self.output_path = self.data_location / 'aggregated_data.txt'
         self.file_paths = self.get_file_paths()
 
         self.write_queue = Queue()
@@ -66,7 +92,13 @@ class BERTLichessDataAggregator:
         self.reader_threads = []
 
     def get_file_paths(self) -> list[tuple[Path, int]]:
-        label_folders = [d for d in self.data_location.iterdir() if d.is_dir() and not d.name.startswith('.')]
+        if not self.include_draw:
+            label_folders = [d for d in self.data_location.iterdir() if d.is_dir()
+                             and not d.name.startswith('.')
+                             and not d.name.endswith('2')]
+        else:
+            label_folders = [d for d in self.data_location.iterdir() if d.is_dir()
+                             and not d.name.startswith('.')]
 
         file_paths = []
         for folder in label_folders:
@@ -118,3 +150,33 @@ class BERTLichessDataAggregator:
         # Signal writer to finish
         self.write_queue.put(self.sentinel)
         self.writer_thread.join()
+
+        return self.output_path
+
+
+class BERTLichessDataShuffler:
+    def __init__(self, input_file: str, buffer_size=100000):
+        self.input_file = Path(input_file)
+        self.output_file = self.input_file.parent / 'shuffled.txt'
+
+        self.buffer_size = buffer_size
+
+    def shuffle(self):
+        buffer = []
+        with open(self.input_file, 'r', encoding='utf-8') as infile, \
+                open(self.output_file, 'w', encoding='utf-8') as outfile:
+
+            for line in infile:
+                if len(buffer) < self.buffer_size:
+                    buffer.append(line)
+                else:
+                    idx = random.randint(0, len(buffer))
+                    if idx < self.buffer_size:
+                        outfile.write(buffer[idx])
+                        buffer[idx] = line
+                    else:
+                        outfile.write(line)
+
+            # Write the remaining buffer shuffled
+            random.shuffle(buffer)
+            outfile.writelines(buffer)

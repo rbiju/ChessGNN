@@ -1,1 +1,6 @@
-from .bert import LichessChessBoardGetter, BERTLichessDatasetCreator, BERTLichessDataAggregator
+from .bert import (LichessChessBoardGetter,
+                   BERTLichessDatasetCreator,
+                   BERTLichessDataAggregator,
+                   BERTLichessDataShuffler)
+
+from .utils import Split

@@ -1,4 +1,7 @@
-from typing import NamedTuple
+import copy
+from dataclasses import dataclass
+
+import einops
 from einops import repeat
 import pytorch_lightning as pl
 
@@ -8,47 +11,62 @@ import torch.nn as nn
 
 from typing import Iterable
 
-from chess_gnn.bert import TransformerBlock, BERTMaskHandler
+from chess_gnn.bert import TransformerBlock, BERTMaskHandler, Mlp
 from chess_gnn.configuration import HydraConfigurable
 from chess_gnn.optimizers import OptimizerFactory
-from chess_gnn.optimizers.lr_schedules import LRSchedulerFactory
+from chess_gnn.lr_schedules.lr_schedules import LRSchedulerFactory
 from chess_gnn.tokenizers import ChessTokenizer
 
 
-class BERTLossWeights(NamedTuple):
+@dataclass
+class BERTLossWeights:
     masking: float = 1.0
     win_prediction: float = 1.0
+
+    def __post_init__(self):
+        self.validate()
+
+    def validate(self):
+        if self.masking < 0 or self.win_prediction < 0:
+            raise ValueError(f"Loss proportions must be positive: {self.masking, self.win_prediction}")
 
 
 @HydraConfigurable
 class ChessBERT(pl.LightningModule):
     def __init__(self, num_layers: int,
                  block: TransformerBlock,
-                 masking_loss: nn.Module,
-                 win_prediction_loss: nn.Module,
                  tokenizer: ChessTokenizer,
                  mask_handler: BERTMaskHandler,
+                 optimizer_factory: OptimizerFactory,
+                 lr_scheduler_factory: LRSchedulerFactory,
                  loss_weights: BERTLossWeights = BERTLossWeights()):
         super().__init__()
         self.num_layers = num_layers
-        self.encoder = nn.ModuleList([block for _ in range(num_layers)])
-        self.masking_loss = masking_loss
-        self.win_prediction_loss = win_prediction_loss
+        self.encoder = nn.ModuleList([copy.deepcopy(block) for _ in range(num_layers)])
         self.mask_handler = mask_handler
 
         self.loss_weights = loss_weights
         self.vocab_size = tokenizer.vocab_size
 
-        self.mask_token = torch.zeros(block.dim)
         self.cls_token = torch.zeros(1, block.dim)
 
-        self.embedding_table = torch.nn.Parameter(torch.rand(tokenizer.vocab_size, 32))
+        self.embedding_table = torch.nn.Parameter(torch.rand(tokenizer.vocab_size + 1, block.dim))
+
+        self.mlm_head = nn.Sequential(nn.Linear(block.dim, self.vocab_size),
+                                      nn.Softmax(dim=-1))
+        self.win_prediction_head = nn.Sequential(Mlp(in_dim=block.dim, out_dim=1, hidden_dim=block.dim),
+                                                 nn.Sigmoid())
+
+        self.masking_loss = nn.CrossEntropyLoss()
+        self.win_prediction_loss = nn.BCELoss()
+
+        self.optimizer_factory = optimizer_factory
+        self.lr_scheduler_factory = lr_scheduler_factory
 
         self.initialize_weights()
 
     def initialize_weights(self):
         torch.nn.init.trunc_normal_(self.cls_token, std=0.02)
-        torch.nn.init.trunc_normal_(self.mask_token, std=0.02)
         torch.nn.init.trunc_normal_(self.embedding_table, std=0.02)
         self.apply(self._init_weights)
 
@@ -59,44 +77,68 @@ class ChessBERT(pl.LightningModule):
             nn.init.constant_(module.weight, 1.0)
 
     def forward(self, x: torch.Tensor) -> dict[str, torch.Tensor]:
-        x, ids_mask = self.mask_handler.mask_sequence(x,
-                                                      vocab_size=self.vocab_size,
-                                                      mask_token=self.mask_token)
-
+        x_ = self.embedding_table[x]
         cls_token = repeat(self.cls_token, 'l e -> b l e', b=x.shape[0])
-        x_ = torch.concat([cls_token, x], dim=1)
+        x_ = torch.concat([cls_token, x_], dim=1)
 
-        x_ = self.encoder(x_)
+        for block in self.encoder:
+            x_ = block(x_)
 
-        return {'cls': x_[..., :1, ...],
-                'tokens': x_[..., :1, ...],
-                'ids_mask': ids_mask}
+        cls = x_[:, :1, :].squeeze()
+        win_prob = self.win_prediction_head(cls).squeeze()
+
+        return {'cls': cls,
+                'tokens': x_[:, 1:, :],
+                'win_probability': win_prob}
+
+    def forward_mask(self, x: torch.Tensor) -> dict[str, torch.Tensor]:
+        x, labels = self.mask_handler(x)
+
+        out = self(x)
+
+        return {**out, 'masked_token_labels': labels}
+
+    def calculate_loss(self, batch):
+        out = self.forward_mask(batch['board'])
+
+        mlm_preds = self.mlm_head(out['tokens'])
+        mlm_preds = einops.rearrange(mlm_preds, 'b l c -> (b l) c')
+        mlm_labels = einops.rearrange(out['masked_token_labels'], 'b l -> (b l)')
+
+        mask_loss = self.masking_loss(mlm_preds, mlm_labels)
+
+        win_prediction_loss = self.win_prediction_loss(out['win_probability'], batch['label'])
+
+        loss = (self.loss_weights.masking * mask_loss +
+                self.loss_weights.win_prediction + win_prediction_loss)
+
+        return {'loss': loss, 'mask_loss': mask_loss, 'win_prediction_loss': win_prediction_loss}
 
     def training_step(self, batch, batch_idx):
-        out = self(batch['board'])
+        loss = self.calculate_loss(batch)
 
-        masked = self.mask_handler.mask_loss(out['tokens'], batch['tokens'], ids_mask=batch['ids_mask'])
-        mask_loss = self.mask_loss(masked)
+        self.log("train_masking_loss", loss['loss'], on_step=True, sync_dist=True)
+        self.log("train_win_prediction_loss", loss['loss'], on_step=True, sync_dist=True)
+        self.log("train_all_loss", loss['loss'], on_step=True, sync_dist=True)
 
-        win_prediction_loss = self.win_prediction_loss(out['cls'], batch['labels'])
-
-        loss = (self.loss_weights.masking * mask_loss +
-                self.loss_weights.win_prediction + win_prediction_loss)
-
-        return {'loss': loss}
+        return loss
 
     def validation_step(self, batch, batch_idx):
+        loss = self.calculate_loss(batch)
+
+        self.log("val_masking_loss", loss['loss'], sync_dist=True)
+        self.log("val_win_prediction_loss", loss['loss'], sync_dist=True)
+        self.log("val_all_loss", loss['loss'], sync_dist=True)
+
+        return loss
+
+    def test_step(self, batch, batch_idx):
+        return self.calculate_loss(batch)
+
+    def predict_step(self, batch, batch_idx, dataloader_idx):
         out = self(batch['board'])
 
-        masked = self.mask_handler.mask_loss(out['tokens'], batch['tokens'], ids_mask=batch['ids_mask'])
-        mask_loss = self.mask_loss(masked)
-
-        win_prediction_loss = self.win_prediction_loss(out['cls'], batch['labels'])
-
-        loss = (self.loss_weights.masking * mask_loss +
-                self.loss_weights.win_prediction + win_prediction_loss)
-
-        return {'loss': loss}
+        return out
 
     @staticmethod
     def configure_optimizer_from_params(params: Iterable[tuple[str, Parameter]],
@@ -116,4 +158,4 @@ class ChessBERT(pl.LightningModule):
     def configure_optimizers(self):
         return self.configure_optimizer_from_params(self.named_parameters(),
                                                     self.optimizer_factory,
-                                                    self.scheduler_factory)
+                                                    self.lr_scheduler_factory)

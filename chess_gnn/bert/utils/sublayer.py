@@ -1,7 +1,5 @@
 import torch.nn as nn
 
-from .norm_factory import NormFactory
-
 
 class SublayerConnection(nn.Module):
     """
@@ -9,9 +7,9 @@ class SublayerConnection(nn.Module):
     Note for code simplicity the norm is first as opposed to last.
     """
 
-    def __init__(self, dropout, norm_factory: NormFactory):
+    def __init__(self, dropout, norm: nn.Module):
         super(SublayerConnection, self).__init__()
-        self.norm = norm_factory.norm()
+        self.norm = norm
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, x, sublayer):
