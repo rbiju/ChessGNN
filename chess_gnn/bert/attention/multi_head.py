@@ -1,5 +1,8 @@
 import torch.nn as nn
+import einops
+
 from .single import Attention
+from .rope import RotaryEmbedding
 
 
 class MultiHeadedAttention(nn.Module):
@@ -9,7 +12,10 @@ class MultiHeadedAttention(nn.Module):
 
     def __init__(self, h, d_model, dropout=0.1):
         super().__init__()
-        assert d_model % h == 0
+        if d_model % h != 0:
+            raise ValueError("model size should be divisible by num heads")
+
+        self.rope = RotaryEmbedding(dim=d_model)
 
         # We assume d_v always equals d_k
         self.d_k = d_model // h
@@ -23,15 +29,16 @@ class MultiHeadedAttention(nn.Module):
 
     def forward(self, query, key, value, mask=None):
         batch_size = query.size(0)
-        if batch_size == 0:
-            print('what the hell')
 
         # 1) Do all the linear projections in batch from d_model => h x d_k
-        query, key, value = [layer(x).view(batch_size, -1, self.h, self.d_k).transpose(1, 2)
-                             for layer, x in zip(self.linear_layers, (query, key, value))]
+        q, k, v = [einops.rearrange(x, 'b n (h d) -> b h n d', h=self.h) for x in (query, key, value)]
+        q = self.rope.rotate_queries_or_keys(q)
+        k = self.rope.rotate_queries_or_keys(k)
+
+        q, k, v = [layer(x) for layer, x in zip(self.linear_layers, (q, k, v))]
 
         # 2) Apply attention on all the projected vectors in batch.
-        x, attn = self.attention(query, key, value, mask=mask, dropout=self.dropout)
+        x, attn = self.attention(q, k, v, mask=mask, dropout=self.dropout)
 
         # 3) "Concat" using a view and apply a final linear.
         x = x.transpose(1, 2).contiguous().view(batch_size, -1, self.h * self.d_k)

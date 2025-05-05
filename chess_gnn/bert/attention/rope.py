@@ -307,8 +307,8 @@ class RotaryEmbedding(Module):
         )
 
         if (
-                should_cache and \
-                exists(self.cached_freqs) and \
+                should_cache and
+                exists(self.cached_freqs) and
                 (offset + seq_len) <= self.cached_freqs_seq_len
         ):
             return self.cached_freqs[offset:(offset + seq_len)].detach()
