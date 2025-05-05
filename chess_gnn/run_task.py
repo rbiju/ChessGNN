@@ -11,7 +11,7 @@ def entrypoint(task_name: str):
         return
 
     task: Task = config.resolve(list(config.cfg.keys())[0])
-    task.run()
+    task.run(configuration_path=config_path)
 
 
 if __name__ == '__main__':

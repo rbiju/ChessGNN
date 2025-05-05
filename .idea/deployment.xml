@@ -2,13 +2,6 @@
 <project version="4">
   <component name="PublishConfigData" autoUpload="Always" serverName="ray@10.0.0.41:2022 agent (2)" remoteFilesAllowedToDisappearOnAutoupload="false">
     <serverData>
-      <paths name="ray@10.0.0.41:2022 agent">
-        <serverdata>
-          <mappings>
-            <mapping deploy="/tmp/pycharm_project_311" local="$PROJECT_DIR$" />
-          </mappings>
-        </serverdata>
-      </paths>
       <paths name="ray@10.0.0.41:2022 agent (2)">
         <serverdata>
           <mappings>
