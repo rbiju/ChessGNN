@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict
 import os
 from pathlib import Path
@@ -8,16 +9,22 @@ from threading import Thread
 from queue import Queue
 from tqdm import tqdm
 
+import torch
+
 from chess_gnn.utils import LichessChessBoardGetter
+from chess_gnn.tokenizers import ChessTokenizer, SimpleChessTokenizer
+
 from .utils import Split
 
 
 class BERTLichessDatasetCreator:
     def __init__(self, pgn_file: str,
-                 data_directory: str,
+                 data_directory: str = None,
                  split: Split = Split(),
                  seed: int = 42, num_workers: int = None):
         self.pgn_file = Path(pgn_file)
+        if data_directory is None:
+            data_directory = self.pgn_file.with_suffix('')
         self.data_directory = Path(data_directory)
         self.board_getter = LichessChessBoardGetter(self.pgn_file)
         self.random_seed = seed
@@ -77,9 +84,11 @@ class BERTLichessDatasetCreator:
 
 
 class BERTLichessDataAggregator:
-    def __init__(self, data_location: str, include_draw: bool = False):
+    def __init__(self, data_location: str, include_draw: bool = False, max_open_files: int = 256):
         self.data_location = Path(data_location)
         self.include_draw = include_draw
+        self.max_open_files = max_open_files  # Limit on number of open files at once
+
         if include_draw:
             self.output_path = self.data_location / 'aggregated_data_with_draws.txt'
         else:
@@ -91,7 +100,7 @@ class BERTLichessDataAggregator:
         self.writer_thread = Thread(target=self._writer)
         self.reader_threads = []
 
-    def get_file_paths(self) -> list[tuple[Path, int]]:
+    def get_file_paths(self) -> list[tuple[Path, str]]:
         if not self.include_draw:
             label_folders = [d for d in self.data_location.iterdir() if d.is_dir()
                              and not d.name.startswith('.')
@@ -120,35 +129,36 @@ class BERTLichessDataAggregator:
                 f.write(line)
                 self.write_queue.task_done()
 
-    def _reader(self, file_path: Path, label: str):
+    def _reader(self, file_path: Path, label: str, pbar):
         """Read a file line-by-line and enqueue labeled lines."""
         try:
             with file_path.open('r', encoding='utf-8') as f:
                 for line in f:
                     clean_line = line.rstrip('\n')
                     self.write_queue.put(f'{clean_line}{label}\n')
+                pbar.update(1)
         except Exception as e:
             print(f'Error reading {file_path}: {e}')
 
     def aggregate(self):
-        """Run the full process: gather files, start threads, and combine them."""
         files = self.file_paths
 
         # Start writer
         self.writer_thread.start()
 
-        # Launch readers
-        for file_path, label in files:
-            t = Thread(target=self._reader, args=(file_path, label))
-            t.start()
-            self.reader_threads.append(t)
+        futures = []
+        # Use a ThreadPoolExecutor to limit the number of reader threads
+        with tqdm(total=len(files), desc="Processing Files") as pbar:
+            with ThreadPoolExecutor(max_workers=self.max_open_files) as executor:
+                for file_path, label in files:
+                    executor.submit(self._reader, file_path, label, pbar)
 
-        # Wait for readers
-        for t in self.reader_threads:
-            t.join()
+        for future in futures:
+            future.result()
 
-        # Signal writer to finish
         self.write_queue.put(self.sentinel)
+
+        # Wait for readers to finish
         self.writer_thread.join()
 
         return self.output_path

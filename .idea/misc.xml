@@ -3,4 +3,5 @@
   <component name="Black">
     <option name="sdkName" value="ChessGNN" />
   </component>
+  <component name="ProjectRootManager" version="2" project-jdk-name="chess_gnn (2)" project-jdk-type="Python SDK" />
 </project>

@@ -2,11 +2,11 @@ BERTTrain:
   _target_: chess_gnn.tasks.BERTTrain
   model:
     _target_: chess_gnn.models.ChessBERT
-    num_layers: 24
+    num_layers: 16
     block:
       _target_: chess_gnn.bert.TransformerBlock
-      hidden: 256
-      attn_heads: 16
+      hidden: 128
+      attn_heads: 8
       feed_forward_hidden: 512
       norm_factory:
         _target_: chess_gnn.bert.utils.DyTNormFactory
@@ -28,13 +28,13 @@ BERTTrain:
       win_prediction: 1.0
   datamodule:
     _target_: chess_gnn.data.BERTDataModule
-    data_directory: '/Users/ray/Datasets/txt/test'
-    batch_size: 64
-    num_workers: 8
+    data_directory: '/home/ray/datasets/chess/lichess_db_standard_rated_2013-08'
+    batch_size: 1024
+    num_workers: 12
   trainer:
     _target_: pytorch_lightning.Trainer
     max_epochs: 10
-    accelerator: 'mps'
+    accelerator: 'auto'
     strategy: 'ddp'
     devices: 1
     precision: 'bf16-mixed'
@@ -42,6 +42,9 @@ BERTTrain:
     num_sanity_val_steps: 2
     logger:
       _target_: pytorch_lightning.loggers.TensorBoardLogger
-      save_dir: '/Users/ray/Tensorboard/chess_bert'
+      save_dir: '/home/ray/Tensorboard/chess_bert'
     callbacks:
       - _target_: pytorch_lightning.callbacks.TQDMProgressBar
+      - _target_: pytorch_lightning.callbacks.ModelCheckpoint
+        dirpath: '/home/ray/lightning_checkpoints/chess_bert'
+        save_last: True

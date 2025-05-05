@@ -1,6 +1,6 @@
 from abc import abstractmethod, ABC
 from typing import Optional
-from torch import Tensor
+
 from chess_gnn.utils.constants import STARTING_BOARD
 
 
@@ -13,5 +13,5 @@ class ChessTokenizer(ABC):
         self.vocab_size = len(self.vocab)
 
     @abstractmethod
-    def tokenize(self, board_str: str) -> Tensor:
+    def tokenize(self, board_str: str) -> list[float]:
         raise NotImplementedError

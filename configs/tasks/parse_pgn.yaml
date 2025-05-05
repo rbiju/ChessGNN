@@ -2,8 +2,7 @@ ParsePgn:
   _target_: chess_gnn.tasks.ParsePgn
   parser:
     _target_: chess_gnn.data_creation.BERTLichessDatasetCreator
-    pgn_file: '/Users/ray/Datasets/chess/test.pgn'
-    data_directory: '/Users/ray/Datasets/txt/test'
+    pgn_file: '/home/ray/datasets/chess/lichess_db_standard_rated_2013-08.pgn'
     split:
       _target_: chess_gnn.data_creation.Split
       train: 0.8

@@ -48,17 +48,16 @@ class ChessBERT(pl.LightningModule):
         self.loss_weights = loss_weights
         self.vocab_size = tokenizer.vocab_size
 
-        self.cls_token = torch.zeros(1, block.dim)
+        self.cls_token = torch.nn.Parameter(torch.rand(1, block.dim))
 
         self.embedding_table = torch.nn.Parameter(torch.rand(tokenizer.vocab_size + 1, block.dim))
 
         self.mlm_head = nn.Sequential(nn.Linear(block.dim, self.vocab_size),
                                       nn.Softmax(dim=-1))
-        self.win_prediction_head = nn.Sequential(Mlp(in_dim=block.dim, out_dim=1, hidden_dim=block.dim),
-                                                 nn.Sigmoid())
+        self.win_prediction_head = nn.Sequential(Mlp(in_dim=block.dim, out_dim=1, hidden_dim=block.dim))
 
         self.masking_loss = nn.CrossEntropyLoss()
-        self.win_prediction_loss = nn.BCELoss()
+        self.win_prediction_loss = nn.BCEWithLogitsLoss()
 
         self.optimizer_factory = optimizer_factory
         self.lr_scheduler_factory = lr_scheduler_factory
