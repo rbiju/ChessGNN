@@ -21,7 +21,7 @@ BERTTrain:
     lr_scheduler_factory:
       _target_: chess_gnn.lr_schedules.CosineAnnealingWarmupFactory
       T_max: 50
-      warmup_epochs: 4
+      warmup_epochs: 0
     loss_weights:
       _target_: chess_gnn.models.BERTLossWeights
       masking: 1.0

@@ -114,4 +114,8 @@ class CosineAnnealingWarmupFactory(LRSchedulerFactory):
         scheduler = torch.optim.lr_scheduler.SequentialLR(optimizer=optimizer,
                                                           schedulers=[warmup, cosine],
                                                           milestones=[self.warmup_epochs])
+
+        if self.warmup_epochs == 0:
+            scheduler = cosine
+
         return scheduler

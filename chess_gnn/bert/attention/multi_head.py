@@ -15,11 +15,14 @@ class MultiHeadedAttention(nn.Module):
         if d_model % h != 0:
             raise ValueError("model size should be divisible by num heads")
 
-        self.rope = RotaryEmbedding(dim=d_model)
-
         # We assume d_v always equals d_k
         self.d_k = d_model // h
         self.h = h
+
+        if self.d_k % 2 != 0:
+            raise ValueError("Head dim should be divisible by 2")
+
+        self.rope = RotaryEmbedding(dim=self.d_k // 2)
 
         self.linear_layers = nn.ModuleList([nn.Linear(d_model, d_model) for _ in range(3)])
         self.output_linear = nn.Linear(d_model, d_model)
@@ -31,11 +34,9 @@ class MultiHeadedAttention(nn.Module):
         batch_size = query.size(0)
 
         # 1) Do all the linear projections in batch from d_model => h x d_k
-        q, k, v = [einops.rearrange(x, 'b n (h d) -> b h n d', h=self.h) for x in (query, key, value)]
+        q, k, v = [einops.rearrange(layer(x), 'b n (h d) -> b h n d', h=self.h) for layer, x in zip(self.linear_layers, (query, key, value))]
         q = self.rope.rotate_queries_or_keys(q)
         k = self.rope.rotate_queries_or_keys(k)
-
-        q, k, v = [layer(x) for layer, x in zip(self.linear_layers, (q, k, v))]
 
         # 2) Apply attention on all the projected vectors in batch.
         x, attn = self.attention(q, k, v, mask=mask, dropout=self.dropout)

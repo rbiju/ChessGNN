@@ -122,18 +122,18 @@ class ChessBERT(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         loss = self.calculate_loss(batch)
 
-        self.log("train_masking_loss", loss['loss'], on_step=True, sync_dist=True)
-        self.log("train_win_prediction_loss", loss['loss'], on_step=True, sync_dist=True)
-        self.log("train_all_loss", loss['loss'], prog_bar=True, on_step=True, sync_dist=True)
+        self.log("train_masking_loss", loss['mask_loss'], on_step=True, sync_dist=True)
+        self.log("train_win_prediction_loss", loss['win_prediction_loss'], on_step=True, sync_dist=True)
+        self.log("loss", loss['loss'], prog_bar=True, on_step=True, sync_dist=True)
 
         return loss
 
     def validation_step(self, batch, batch_idx):
         loss = self.calculate_loss(batch)
 
-        self.log("val_masking_loss", loss['loss'], sync_dist=True)
-        self.log("val_win_prediction_loss", loss['loss'], sync_dist=True)
-        self.log("val_all_loss", loss['loss'], sync_dist=True)
+        self.log("val_masking_loss", loss['mask_loss'], sync_dist=True)
+        self.log("val_win_prediction_loss", loss['win_prediction_loss'], sync_dist=True)
+        self.log("loss", loss['loss'], sync_dist=True)
 
         return loss
 
