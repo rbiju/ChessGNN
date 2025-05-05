@@ -75,6 +75,11 @@ class ChessBERT(pl.LightningModule):
             nn.init.constant_(module.bias, 0)
             nn.init.constant_(module.weight, 1.0)
 
+    @staticmethod
+    def squeeze_batch(batch):
+        return {'board': batch['board'].squeeze(),
+                'label': batch['label'].squeeze()}
+
     def forward(self, x: torch.Tensor) -> dict[str, torch.Tensor]:
         x_ = self.embedding_table[x]
         cls_token = repeat(self.cls_token, 'l e -> b l e', b=x.shape[0])
@@ -98,6 +103,7 @@ class ChessBERT(pl.LightningModule):
         return {**out, 'masked_token_labels': labels}
 
     def calculate_loss(self, batch):
+        batch = self.squeeze_batch(batch)
         out = self.forward_mask(batch['board'])
 
         mlm_preds = self.mlm_head(out['tokens'])
@@ -118,7 +124,7 @@ class ChessBERT(pl.LightningModule):
 
         self.log("train_masking_loss", loss['loss'], on_step=True, sync_dist=True)
         self.log("train_win_prediction_loss", loss['loss'], on_step=True, sync_dist=True)
-        self.log("train_all_loss", loss['loss'], on_step=True, sync_dist=True)
+        self.log("train_all_loss", loss['loss'], prog_bar=True, on_step=True, sync_dist=True)
 
         return loss
 

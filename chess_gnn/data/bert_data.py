@@ -80,29 +80,33 @@ class MMapWinPredictionBERTDataset(IterableDataset):
 
 
 class HDF5ChessDataset(torch.utils.data.Dataset):
-    def __init__(self, h5_file_path: Path):
-        # Open the HDF5 file for read-only access
-        self.h5_file_path = h5_file_path
-        self.h5f = h5py.File(h5_file_path, 'r')
-        self.board_ds = self.h5f['board']
-        self.label_ds = self.h5f['label']
-        self.total_length = self.h5f.attrs['total_length']
+    def __init__(self, path: str, batch_size: int):
+        self.path = path
+        self.batch_size = batch_size
+        self.h5_file = None
+
+        with h5py.File(self.path, 'r') as f:
+            self.total_samples = f.attrs['total_length']
+
+        self.total_batches = (self.total_samples + batch_size - 1) // batch_size
 
     def __len__(self):
-        # Return the total number of samples (length of the dataset)
-        return self.total_length
+        return self.total_batches
+
+    def _ensure_file_open(self):
+        if self.h5_file is None:
+            self.h5_file = h5py.File(self.path, 'r')
 
     def __getitem__(self, idx):
-        # Fetch the board and label data at the given index
-        board = self.board_ds[idx]  # (max_len,)
-        label = self.label_ds[idx]  # Scalar label
+        self._ensure_file_open()
 
-        # Convert to torch tensors (could be optimized depending on use)
-        board_tensor = torch.tensor(board, dtype=torch.long)
-        label_tensor = torch.tensor(label, dtype=torch.float32)
+        start = idx * self.batch_size
+        end = min(start + self.batch_size, self.total_samples)
 
-        return {'board': board_tensor, 'label': label_tensor}
+        boards = self.h5_file['board'][start:end]
+        labels = self.h5_file['label'][start:end]
 
-    def __del__(self):
-        # Ensure that the HDF5 file is properly closed when the object is deleted
-        self.h5f.close()
+        return {
+            'board': torch.tensor(boards, dtype=torch.long),
+            'label': torch.tensor(labels, dtype=torch.float32)
+        }

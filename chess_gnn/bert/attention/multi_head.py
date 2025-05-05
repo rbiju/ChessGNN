@@ -23,10 +23,12 @@ class MultiHeadedAttention(nn.Module):
 
     def forward(self, query, key, value, mask=None):
         batch_size = query.size(0)
+        if batch_size == 0:
+            print('what the hell')
 
         # 1) Do all the linear projections in batch from d_model => h x d_k
-        query, key, value = [l(x).view(batch_size, -1, self.h, self.d_k).transpose(1, 2)
-                             for l, x in zip(self.linear_layers, (query, key, value))]
+        query, key, value = [layer(x).view(batch_size, -1, self.h, self.d_k).transpose(1, 2)
+                             for layer, x in zip(self.linear_layers, (query, key, value))]
 
         # 2) Apply attention on all the projected vectors in batch.
         x, attn = self.attention(query, key, value, mask=mask, dropout=self.dropout)

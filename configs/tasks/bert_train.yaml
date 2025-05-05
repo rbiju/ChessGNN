@@ -2,12 +2,12 @@ BERTTrain:
   _target_: chess_gnn.tasks.BERTTrain
   model:
     _target_: chess_gnn.models.ChessBERT
-    num_layers: 16
+    num_layers: 12
     block:
       _target_: chess_gnn.bert.TransformerBlock
-      hidden: 128
+      hidden: 256
       attn_heads: 8
-      feed_forward_hidden: 512
+      feed_forward_hidden: 1024
       norm_factory:
         _target_: chess_gnn.bert.utils.DyTNormFactory
     tokenizer:
@@ -25,12 +25,12 @@ BERTTrain:
     loss_weights:
       _target_: chess_gnn.models.BERTLossWeights
       masking: 1.0
-      win_prediction: 1.0
+      win_prediction: 2.0
   datamodule:
     _target_: chess_gnn.data.BERTDataModule
     data_directory: '/home/ray/datasets/chess/lichess_db_standard_rated_2013-08'
     batch_size: 1024
-    num_workers: 12
+    num_workers: 8
   trainer:
     _target_: pytorch_lightning.Trainer
     max_epochs: 10

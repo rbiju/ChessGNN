@@ -1,3 +1,4 @@
+import torch
 from pytorch_lightning import Trainer, seed_everything
 
 from chess_gnn.models import ChessBERT
@@ -12,8 +13,9 @@ class BERTTrain(Task):
     def __init__(self, model: ChessBERT, datamodule: BERTDataModule, trainer: Trainer):
         super().__init__()
         seed_everything(42)
+        torch.set_float32_matmul_precision('medium')
 
-        self.model = model
+        self.model = torch.compile(model)
         self.datamodule = datamodule
         self.trainer = trainer
 

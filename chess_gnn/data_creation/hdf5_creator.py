@@ -8,8 +8,10 @@ from chess_gnn.tokenizers import ChessTokenizer, SimpleChessTokenizer
 
 class HDF5DatasetBuilder:
     def __init__(self,
+                 chunk_size: int,
                  tokenizer: ChessTokenizer = SimpleChessTokenizer(),
                  max_len: int = 64):
+        self.chunk_size = chunk_size
         self.tokenizer = tokenizer
         self.max_len = max_len
 
@@ -25,10 +27,10 @@ class HDF5DatasetBuilder:
         with h5py.File(output_path, 'w') as h5f:
             # Create the 'board' and 'label' datasets with predetermined size
             board_ds = h5f.create_dataset(
-                'board', shape=(total_samples, self.max_len), dtype='i8', chunks=(1, self.max_len)
+                'board', shape=(total_samples, self.max_len), dtype='i8', chunks=(self.chunk_size, self.max_len)
             )
             label_ds = h5f.create_dataset(
-                'label', shape=(total_samples,), dtype='f4', chunks=(1,)
+                'label', shape=(total_samples,), dtype='f4', chunks=(self.chunk_size,)
             )
 
             total = 0

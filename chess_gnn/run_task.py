@@ -15,4 +15,4 @@ def entrypoint(task_name: str):
 
 
 if __name__ == '__main__':
-    entrypoint('WriteH5')
+    entrypoint('BERTTrain')

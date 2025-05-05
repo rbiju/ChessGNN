@@ -3,7 +3,7 @@ from pathlib import Path
 from torch.utils.data import DataLoader
 from pytorch_lightning import LightningDataModule
 
-from .bert_data import WinPredictionMapDataset, DataTransform, WinPredictionTransform
+from .bert_data import HDF5ChessDataset, DataTransform, WinPredictionTransform
 
 
 class BERTDataModule(LightningDataModule):
@@ -19,18 +19,18 @@ class BERTDataModule(LightningDataModule):
 
     def train_dataloader(self):
         file = self.data_directory / 'train' / self.file_name
-        dataset = WinPredictionMapDataset(file, transform=self.transform)
+        dataset = HDF5ChessDataset(str(file), self.batch_size)
 
-        return DataLoader(dataset, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=True, persistent_workers=True)
+        return DataLoader(dataset, batch_size=1, num_workers=self.num_workers, shuffle=False, persistent_workers=True, pin_memory=True, prefetch_factor=8)
 
     def val_dataloader(self):
         file = self.data_directory / 'val' / self.file_name
-        dataset = WinPredictionMapDataset(file, transform=self.transform)
+        dataset = HDF5ChessDataset(str(file), self.batch_size)
 
-        return DataLoader(dataset, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=False, persistent_workers=True)
+        return DataLoader(dataset, batch_size=1, num_workers=self.num_workers, shuffle=False, persistent_workers=True, pin_memory=True, prefetch_factor=8)
 
     def test_dataloader(self):
         file = self.data_directory / 'test' / self.file_name
-        dataset = WinPredictionMapDataset(file, transform=self.transform)
+        dataset = HDF5ChessDataset(str(file), self.batch_size)
 
-        return DataLoader(dataset, batch_size=self.batch_size, num_workers=self.num_workers, shuffle=False)
+        return DataLoader(dataset, batch_size=1, num_workers=self.num_workers, shuffle=False)
