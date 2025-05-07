@@ -1,1 +1,1 @@
-from .lr_schedules import LRSchedulerFactory, StepLR, CosineAnnealingWarmupFactory
+from .lr_schedules import LRSchedulerFactory, StepLRFactory, CosineAnnealingWarmupFactory

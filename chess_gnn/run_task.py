@@ -11,6 +11,7 @@ def entrypoint(task_name: str):
         return
 
     task: Task = config.resolve(list(config.cfg.keys())[0])
+    print(f"Running task {type(task).__name__}")
     task.run(configuration_path=config_path)
 
 

@@ -13,7 +13,7 @@ class WriteH5(Task):
         self.data_directory = Path(data_directory)
         self.writer = writer
 
-    def run(self):
+    def run(self, **kwargs):
         files = []
         for split_folder in self.data_directory.iterdir():
             if split_folder.is_dir():

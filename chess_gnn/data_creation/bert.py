@@ -9,10 +9,7 @@ from threading import Thread
 from queue import Queue
 from tqdm import tqdm
 
-import torch
-
 from chess_gnn.utils import LichessChessBoardGetter
-from chess_gnn.tokenizers import ChessTokenizer, SimpleChessTokenizer
 
 from .utils import Split
 

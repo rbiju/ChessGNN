@@ -5,6 +5,7 @@ BERTTrain:
     num_layers: 12
     block:
       _target_: chess_gnn.bert.TransformerBlock
+      pos_emb_mode: "relative"
       hidden: 256
       attn_heads: 8
       feed_forward_hidden: 1024
@@ -14,14 +15,15 @@ BERTTrain:
       _target_: chess_gnn.tokenizers.SimpleChessTokenizer
     mask_handler:
       _target_: chess_gnn.bert.BERTMaskHandler
+      mask_prob: 0.15
     optimizer_factory:
       _target_: chess_gnn.optimizers.LambFactory
-      learning_rate: 1e-3
+      learning_rate: 1e-4
       weight_decay: 1e-4
     lr_scheduler_factory:
       _target_: chess_gnn.lr_schedules.CosineAnnealingWarmupFactory
-      T_max: 50
-      warmup_epochs: 0
+      T_0: 10000
+      warmup_steps: 1000
     loss_weights:
       _target_: chess_gnn.models.BERTLossWeights
       masking: 1.0
@@ -34,18 +36,22 @@ BERTTrain:
   trainer:
     _target_: pytorch_lightning.Trainer
     log_every_n_steps: 100
-    max_epochs: 10
+    max_epochs: 3
     accelerator: 'auto'
     strategy: 'ddp'
     devices: 1
     precision: 'bf16-mixed'
-    check_val_every_n_epoch: 5
+    check_val_every_n_epoch: 1
     num_sanity_val_steps: 1
     callbacks:
       - _target_: pytorch_lightning.callbacks.TQDMProgressBar
+      - _target_: pytorch_lightning.callbacks.LearningRateMonitor
+        logging_interval: 'step'
       - _target_: pytorch_lightning.callbacks.ModelCheckpoint
         dirpath: '/home/ray/lightning_checkpoints/chess_bert'
         save_last: True
+        every_n_epochs: 1
+        save_on_train_epoch_end: True
   logger:
     _target_: chess_gnn.callbacks.CometLoggerCallbackFactory
-    project_name: "chessbert"
+    project: "chessbert"

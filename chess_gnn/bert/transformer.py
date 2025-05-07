@@ -1,6 +1,6 @@
 import torch.nn as nn
 
-from .attention import MultiHeadedAttention
+from .attention import MultiHeadedAttention, MultiHeadedAttentionRoPE, RelativeMultiHeadAttention
 from .utils import SublayerConnection, PositionwiseFeedForward, NormFactory
 
 
@@ -10,7 +10,7 @@ class TransformerBlock(nn.Module):
     Transformer = MultiHead_Attention + Feed_Forward with sublayer connection
     """
 
-    def __init__(self, hidden, attn_heads, feed_forward_hidden, norm_factory: NormFactory, dropout=0.):
+    def __init__(self, hidden, attn_heads, feed_forward_hidden, norm_factory: NormFactory, pos_emb_mode: str = "relative", dropout=0.):
         """
         :param hidden: hidden size of transformer
         :param attn_heads: head sizes of multi-head attention
@@ -20,14 +20,21 @@ class TransformerBlock(nn.Module):
 
         super().__init__()
         self.dim = hidden
-        self.attention = MultiHeadedAttention(h=attn_heads, d_model=hidden)
+        if pos_emb_mode == "relative":
+            self.attention = RelativeMultiHeadAttention(hidden, attn_heads)
+        elif pos_emb_mode == "rope":
+            self.attention = MultiHeadedAttentionRoPE(h=attn_heads, d_model=hidden)
+        elif pos_emb_mode == "vanilla":
+            self.attention = MultiHeadedAttention(h=attn_heads, d_model=hidden)
+        else:
+            raise NotImplementedError("Only 'relative', 'rope' or 'vanilla' are supported multihead attention modes")
+
         self.feed_forward = PositionwiseFeedForward(d_model=hidden, d_ff=feed_forward_hidden, dropout=dropout)
         norm = norm_factory.norm(hidden)
         self.input_sublayer = SublayerConnection(dropout=dropout, norm=norm)
         self.output_sublayer = SublayerConnection(dropout=dropout, norm=norm)
-        self.dropout = nn.Dropout(p=dropout)
 
-    def forward(self, x, mask=None):
-        x = self.input_sublayer(x, lambda _x: self.attention.forward(_x, _x, _x, mask=mask))
+    def forward(self, x):
+        x = self.input_sublayer(x, lambda _x: self.attention.forward(_x, _x, _x))
         x = self.output_sublayer(x, self.feed_forward)
-        return self.dropout(x)
+        return x

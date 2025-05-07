@@ -9,12 +9,10 @@ class Attention(nn.Module):
     def __init__(self):
         super().__init__()
 
-    def forward(self, query, key, value, mask=None, dropout=None):
+    @staticmethod
+    def forward(query, key, value, dropout=None):
         scores = torch.matmul(query, key.transpose(-2, -1)) \
                  / math.sqrt(query.size(-1))
-
-        if mask is not None:
-            scores = scores.masked_fill(mask == 0, -1e9)
 
         p_attn = F.softmax(scores, dim=-1)
 

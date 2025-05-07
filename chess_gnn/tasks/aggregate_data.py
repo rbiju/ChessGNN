@@ -10,7 +10,7 @@ class AggregateData(Task):
         super().__init__()
         self.aggregator = aggregator
 
-    def run(self):
+    def run(self, **kwargs):
         self.aggregator.aggregate()
 
 

@@ -10,7 +10,7 @@ class ShuffleData(Task):
         super().__init__()
         self.shuffler = shuffler
 
-    def run(self):
+    def run(self, **kwargs):
         self.shuffler.shuffle()
 
 

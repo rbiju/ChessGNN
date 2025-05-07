@@ -13,7 +13,7 @@ class ParsePgn(Task):
         self.parser = parser
         self.include_draw = include_draw
 
-    def run(self):
+    def run(self, **kwargs):
         start_time = time.time()
         data_folders = self.parser.create_dataset()
         end_time = time.time()

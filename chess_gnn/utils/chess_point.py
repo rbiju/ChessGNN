@@ -22,6 +22,9 @@ class ChessPoint(NamedTuple):
     def __eq__(self, other: "ChessPoint") -> bool:
         return self.x == other.x and self.y == other.y
 
+    def in_board(self) -> bool:
+        return 0 <= self.x < 8 and 0 <= self.y < 8
+
     def up(self):
         return ChessPoint(self.x, self.y + 1)
 
@@ -50,10 +53,12 @@ class ChessPoint(NamedTuple):
 
         return out
 
+    def other_squares(self) -> List["ChessPoint"]:
+        return [ChessPoint.from_1d(i) for i in range(64) if i != self.to_1d()]
+
     def adjacent(self):
-        bottom_left = self.down().left().clip()
-        top_right = self.up().right().clip()
-        return bottom_left.range(top_right)
+        points = [self.up(), self.down(), self.left(), self.right()]
+        return [point for point in points if point.in_board()]
 
     def edge(self, other: "ChessPoint") -> "ChessEdge":
         return ChessEdge(self, other)

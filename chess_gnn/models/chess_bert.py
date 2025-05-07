@@ -52,9 +52,10 @@ class ChessBERT(pl.LightningModule):
 
         self.embedding_table = torch.nn.Parameter(torch.rand(tokenizer.vocab_size + 1, block.dim))
 
-        self.mlm_head = nn.Sequential(nn.Linear(block.dim, self.vocab_size),
-                                      nn.Softmax(dim=-1))
+        self.mlm_head = nn.Sequential(nn.Linear(block.dim, self.vocab_size))
         self.win_prediction_head = nn.Sequential(Mlp(in_dim=block.dim, out_dim=1, hidden_dim=block.dim))
+
+        self.norm = nn.LayerNorm(block.dim)
 
         self.masking_loss = nn.CrossEntropyLoss()
         self.win_prediction_loss = nn.BCEWithLogitsLoss()
@@ -88,6 +89,8 @@ class ChessBERT(pl.LightningModule):
         for block in self.encoder:
             x_ = block(x_)
 
+        x_ = self.norm(x_)
+
         cls = x_[:, :1, :].squeeze()
         win_prob = self.win_prediction_head(cls).squeeze()
 
@@ -107,15 +110,14 @@ class ChessBERT(pl.LightningModule):
         out = self.forward_mask(batch['board'])
 
         mlm_preds = self.mlm_head(out['tokens'])
-        mlm_preds = einops.rearrange(mlm_preds, 'b l c -> (b l) c')
-        mlm_labels = einops.rearrange(out['masked_token_labels'], 'b l -> (b l)')
+        mlm_preds = einops.rearrange(mlm_preds, 'b l c -> b c l')
 
-        mask_loss = self.masking_loss(mlm_preds, mlm_labels)
+        mask_loss = self.masking_loss(mlm_preds, out['masked_token_labels'])
 
         win_prediction_loss = self.win_prediction_loss(out['win_probability'], batch['label'])
 
         loss = (self.loss_weights.masking * mask_loss +
-                self.loss_weights.win_prediction + win_prediction_loss)
+                self.loss_weights.win_prediction * win_prediction_loss)
 
         return {'loss': loss, 'mask_loss': mask_loss, 'win_prediction_loss': win_prediction_loss}
 
@@ -150,7 +152,7 @@ class ChessBERT(pl.LightningModule):
                                         optimizer_factory: OptimizerFactory,
                                         scheduler_factory: LRSchedulerFactory):
         if optimizer_factory is None or scheduler_factory is None:
-            raise RuntimeError('Optimizer and scheduler must be set for nagini training')
+            raise RuntimeError('Optimizer and scheduler must be set for training')
 
         optimizer = optimizer_factory.optimizer(params=params)
         scheduler = scheduler_factory.scheduler(optimizer=optimizer)
