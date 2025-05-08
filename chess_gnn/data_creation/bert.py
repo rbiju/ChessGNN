@@ -1,12 +1,14 @@
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import asdict
+from functools import partial
 import os
 from pathlib import Path
 import random
+import shutil
+from uuid import uuid4
 
 import multiprocessing
-from threading import Thread
-from queue import Queue
+
 from tqdm import tqdm
 
 from chess_gnn.utils import LichessChessBoardGetter
@@ -34,6 +36,7 @@ class BERTLichessDatasetCreator:
                 os.makedirs(self.data_directory / split / str(state), exist_ok=True)
 
     def _get_game_offsets(self) -> list[int]:
+        print("Getting game offsets...")
         offsets = []
         with open(self.pgn_file, encoding="utf-8") as f:
             offset = 0
@@ -44,6 +47,8 @@ class BERTLichessDatasetCreator:
                 if line.startswith("[Event "):  # Game start
                     offsets.append(offset)
                 offset = f.tell()
+
+        print("Game offsets retrieved.")
         return offsets
 
     def _choose_split(self, offset: int) -> str:
@@ -81,30 +86,30 @@ class BERTLichessDatasetCreator:
 
 
 class BERTLichessDataAggregator:
-    def __init__(self, data_location: str, include_draw: bool = False, max_open_files: int = 256):
+    def __init__(self, data_location: str, batch_size: int = 750, include_draw: bool = False):
         self.data_location = Path(data_location)
         self.include_draw = include_draw
-        self.max_open_files = max_open_files  # Limit on number of open files at once
+        self.batch_size = batch_size
 
-        if include_draw:
-            self.output_path = self.data_location / 'aggregated_data_with_draws.txt'
-        else:
-            self.output_path = self.data_location / 'aggregated_data.txt'
+        self.output_path = self.data_location / (
+            'aggregated_data_with_draws.txt' if include_draw else 'aggregated_data.txt'
+        )
+        self.temp_dir = self.data_location / ".temp_agg_parts"
+        self.temp_dir.mkdir(exist_ok=True)
+
         self.file_paths = self.get_file_paths()
-
-        self.write_queue = Queue()
-        self.sentinel = None
-        self.writer_thread = Thread(target=self._writer)
-        self.reader_threads = []
 
     def get_file_paths(self) -> list[tuple[Path, str]]:
         if not self.include_draw:
-            label_folders = [d for d in self.data_location.iterdir() if d.is_dir()
-                             and not d.name.startswith('.')
-                             and not d.name.endswith('2')]
+            label_folders = [
+                d for d in self.data_location.iterdir()
+                if d.is_dir() and not d.name.startswith('.') and not d.name.endswith('2')
+            ]
         else:
-            label_folders = [d for d in self.data_location.iterdir() if d.is_dir()
-                             and not d.name.startswith('.')]
+            label_folders = [
+                d for d in self.data_location.iterdir()
+                if d.is_dir() and not d.name.startswith('.')
+            ]
 
         file_paths = []
         for folder in label_folders:
@@ -116,74 +121,77 @@ class BERTLichessDataAggregator:
         random.shuffle(file_paths)
         return file_paths
 
-    def _writer(self):
-        """Continuously write lines from the queue to the output file."""
-        with self.output_path.open('w', encoding='utf-8') as f:
-            while True:
-                line = self.write_queue.get()
-                if line is self.sentinel:
-                    break
-                f.write(line)
-                self.write_queue.task_done()
+    @staticmethod
+    def process_file_batch(batch: list[tuple[Path, str]], temp_dir: Path) -> str:
+        out_path = temp_dir / f"{uuid4().hex}.txt"
+        buffer = []
 
-    def _reader(self, file_path: Path, label: str, pbar):
-        """Read a file line-by-line and enqueue labeled lines."""
-        try:
-            with file_path.open('r', encoding='utf-8') as f:
-                for line in f:
-                    clean_line = line.rstrip('\n')
-                    self.write_queue.put(f'{clean_line}{label}\n')
-                pbar.update(1)
-        except Exception as e:
-            print(f'Error reading {file_path}: {e}')
+        for file_path, label in batch:
+            try:
+                with file_path.open('r', encoding='utf-8') as f:
+                    buffer.extend(f"{line.rstrip()}/{label}\n" for line in f)
+            except Exception as e:
+                print(f"Failed to read {file_path}: {e}")
+
+        with out_path.open('w', encoding='utf-8') as fout:
+            fout.writelines(buffer)
+
+        return str(out_path)
+
+    @staticmethod
+    def chunked(iterable, n):
+        """Yield successive n-sized chunks from iterable."""
+        for i in range(0, len(iterable), n):
+            yield iterable[i:i + n]
 
     def aggregate(self):
-        files = self.file_paths
+        num_workers = max(1, multiprocessing.cpu_count() - 1)
+        batches = list(self.chunked(self.file_paths, self.batch_size))
 
-        # Start writer
-        self.writer_thread.start()
+        print(f"Aggregating {len(self.file_paths)} files in {len(batches)} batches using {num_workers} workers...")
 
-        futures = []
-        # Use a ThreadPoolExecutor to limit the number of reader threads
-        with tqdm(total=len(files), desc="Processing Files") as pbar:
-            with ThreadPoolExecutor(max_workers=self.max_open_files) as executor:
-                for file_path, label in files:
-                    executor.submit(self._reader, file_path, label, pbar)
+        with ProcessPoolExecutor(max_workers=num_workers) as executor:
+            process_fn = partial(self.process_file_batch, temp_dir=self.temp_dir)
+            results = executor.map(process_fn, batches, chunksize=1)
+            part_files = list(tqdm(results, total=len(batches), desc="Processing Batches"))
 
-        for future in futures:
-            future.result()
+        with self.output_path.open('w', encoding='utf-8') as fout:
+            for part_file in part_files:
+                with open(part_file, 'r', encoding='utf-8') as pf:
+                    shutil.copyfileobj(pf, fout)
 
-        self.write_queue.put(self.sentinel)
-
-        # Wait for readers to finish
-        self.writer_thread.join()
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+        print(f"Aggregation complete: {self.output_path}")
 
         return self.output_path
 
 
 class BERTLichessDataShuffler:
-    def __init__(self, input_file: str, buffer_size=100000):
+    def __init__(self, input_file: str, buffer_size: int = 2500):
         self.input_file = Path(input_file)
         self.output_file = self.input_file.parent / 'shuffled.txt'
-
         self.buffer_size = buffer_size
 
     def shuffle(self):
         buffer = []
+
         with open(self.input_file, 'r', encoding='utf-8') as infile, \
-                open(self.output_file, 'w', encoding='utf-8') as outfile:
+             open(self.output_file, 'w', encoding='utf-8') as outfile:
 
-            for line in infile:
-                if len(buffer) < self.buffer_size:
+            total_lines = sum(1 for _ in open(self.input_file, 'r', encoding='utf-8'))
+            infile.seek(0)  # Reset after counting
+
+            with tqdm(total=total_lines, desc="Windowed shuffling", unit="lines") as pbar:
+                for line in infile:
                     buffer.append(line)
-                else:
-                    idx = random.randint(0, len(buffer))
-                    if idx < self.buffer_size:
-                        outfile.write(buffer[idx])
-                        buffer[idx] = line
-                    else:
-                        outfile.write(line)
+                    if len(buffer) >= self.buffer_size:
+                        random.shuffle(buffer)
+                        outfile.writelines(buffer)
+                        buffer.clear()
+                        pbar.update(self.buffer_size)
 
-            # Write the remaining buffer shuffled
-            random.shuffle(buffer)
-            outfile.writelines(buffer)
+                # Write remaining lines
+                if buffer:
+                    random.shuffle(buffer)
+                    outfile.writelines(buffer)
+                    pbar.update(len(buffer))

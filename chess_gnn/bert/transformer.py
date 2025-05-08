@@ -20,14 +20,15 @@ class TransformerBlock(nn.Module):
 
         super().__init__()
         self.dim = hidden
+        self.pos_emb_mode = pos_emb_mode
         if pos_emb_mode == "relative":
             self.attention = RelativeMultiHeadAttention(hidden, attn_heads)
         elif pos_emb_mode == "rope":
             self.attention = MultiHeadedAttentionRoPE(h=attn_heads, d_model=hidden)
-        elif pos_emb_mode == "vanilla":
+        elif pos_emb_mode == "learned":
             self.attention = MultiHeadedAttention(h=attn_heads, d_model=hidden)
         else:
-            raise NotImplementedError("Only 'relative', 'rope' or 'vanilla' are supported multihead attention modes")
+            raise NotImplementedError("Only 'relative', 'rope' or 'learned' are supported positional embedding modes")
 
         self.feed_forward = PositionwiseFeedForward(d_model=hidden, d_ff=feed_forward_hidden, dropout=dropout)
         norm = norm_factory.norm(hidden)

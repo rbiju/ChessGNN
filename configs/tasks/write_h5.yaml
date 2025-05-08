@@ -1,6 +1,6 @@
 WriteH5:
   _target_: chess_gnn.tasks.WriteH5
-  data_directory: '/home/ray/datasets/chess/lichess_db_standard_rated_2013-08'
+  data_directory: '/home/ray/datasets/chess/lichess_db_standard_rated_2017-02'
   writer:
     _target_: chess_gnn.data_creation.HDF5DatasetBuilder
     chunk_size: 1024

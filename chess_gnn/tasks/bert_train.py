@@ -1,4 +1,5 @@
-import os
+from pathlib import Path
+import uuid
 
 import comet_ml
 import torch
@@ -6,27 +7,32 @@ from pytorch_lightning import Trainer, seed_everything
 
 from chess_gnn.models import ChessBERT
 from chess_gnn.data import BERTDataModule
+from chess_gnn.trainer import TrainerFactory
 
 from chess_gnn.configuration import HydraConfigurable, LocalHydraConfiguration
 from chess_gnn.tasks.base import Task, get_config_path
-from chess_gnn.callbacks import CometLoggerCallbackFactory
 
 
 @HydraConfigurable
 class BERTTrain(Task):
-    def __init__(self, model: ChessBERT, datamodule: BERTDataModule, trainer: Trainer, logger: CometLoggerCallbackFactory):
+    def __init__(self, model: ChessBERT, datamodule: BERTDataModule, trainer_factory: TrainerFactory):
         super().__init__()
         seed_everything(42)
         torch.set_float32_matmul_precision('medium')
 
         self.model = model
         self.datamodule = datamodule
-        self.trainer = trainer
-        self.logger_factory = logger
+
+        self.uid = str(uuid.uuid4())
+
+        ckpt_dir = Path('/home/ray/lightning_checkpoints/chess_bert') / self.uid
+        trainer_factory.resolve_checkpoint_callback(ckpt_dir=str(ckpt_dir))
+        trainer_factory.resolve_logger()
+
+        self.trainer: Trainer = trainer_factory.trainer()
 
     def run(self, configuration_path: str):
-        self.trainer.logger = self.logger_factory.logger(os.getenv("COMET_API_KEY"))
-
+        print(f"Saving model in {self.uid}")
         artifact = comet_ml.Artifact(name="configuration", artifact_type="ConfigurationFile")
         artifact.add(configuration_path)
         experiment = self.trainer.logger.experiment

@@ -41,6 +41,9 @@ class ChessBERT(pl.LightningModule):
                  lr_scheduler_factory: LRSchedulerFactory,
                  loss_weights: BERTLossWeights = BERTLossWeights()):
         super().__init__()
+        self.has_learned_pos_emb = False
+        self.pos_emb = None
+        self.dim = block.dim
         self.num_layers = num_layers
         self.encoder = nn.ModuleList([copy.deepcopy(block) for _ in range(num_layers)])
         self.mask_handler = mask_handler
@@ -53,7 +56,12 @@ class ChessBERT(pl.LightningModule):
         self.embedding_table = torch.nn.Parameter(torch.rand(tokenizer.vocab_size + 1, block.dim))
 
         self.mlm_head = nn.Sequential(nn.Linear(block.dim, self.vocab_size))
-        self.win_prediction_head = nn.Sequential(Mlp(in_dim=block.dim, out_dim=1, hidden_dim=block.dim))
+        self.win_prediction_head = Mlp(in_dim=block.dim, out_dim=1, hidden_dim=block.dim)
+
+        if block.pos_emb_mode == 'learned':
+            self.has_learned_pos_emb = True
+            self.pos_emb = torch.nn.Parameter(torch.rand(65, block.dim))
+            torch.nn.init.trunc_normal_(self.pos_emb, std=0.02)
 
         self.norm = nn.LayerNorm(block.dim)
 
@@ -85,6 +93,9 @@ class ChessBERT(pl.LightningModule):
         x_ = self.embedding_table[x]
         cls_token = repeat(self.cls_token, 'l e -> b l e', b=x.shape[0])
         x_ = torch.concat([cls_token, x_], dim=1)
+
+        if self.has_learned_pos_emb:
+            x_ = repeat(self.pos_emb, 'l e -> b l e', b=x.shape[0]) + x_
 
         for block in self.encoder:
             x_ = block(x_)

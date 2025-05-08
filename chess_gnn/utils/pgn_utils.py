@@ -41,9 +41,13 @@ class LichessChessBoardGetter(ChessBoardGetter):
 
             board = game.board()
             positions = []
+            whose_move = False
             for move in game.mainline_moves():
+                move_from = move.from_square
+                move_to = move.to_square
+                positions.append(f'{self.process_board_string(str(board))}/{move_from}/{move_to}/{int(whose_move)}')
                 board.push(move)
-                positions.append(self.process_board_string(str(board)))
+                whose_move = not whose_move
 
             return result, identifier, positions
 

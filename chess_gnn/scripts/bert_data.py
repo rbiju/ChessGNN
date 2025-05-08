@@ -5,6 +5,7 @@ from chess_gnn.data import BERTDataModule
 from chess_gnn.models import ChessBERT
 from chess_gnn.configuration import LocalHydraConfiguration
 
+import torch
 from pytorch_lightning.utilities.model_summary import ModelSummary
 
 
@@ -24,6 +25,18 @@ def model_test():
 
     ms = ModelSummary(model=model)
     print(ms)
+
+
+def model_dummy_forward():
+    cfg = LocalHydraConfiguration('/Users/ray/Projects/ChessGNN/configs/bert/training/bert.yaml')
+    model = ChessBERT.from_hydra_configuration(cfg)
+
+    batch = {'board': torch.randint(low=0, high=13, size=(4, 64)),
+             'label': torch.randint(low=0, high=2, size=(4,)).float()}
+
+    out = model.calculate_loss(batch)
+
+    return out
 
 
 def model_forward_test():
@@ -55,4 +68,4 @@ def test_datamodule():
 
 
 if __name__ == '__main__':
-    test_datamodule()
+    test_data()
