@@ -74,7 +74,7 @@ class MultiHeadedAttention(nn.Module):
         q, k, v = [einops.rearrange(layer(x), 'b n (h d) -> b h n d', h=self.h) for layer, x in zip(self.linear_layers, (query, key, value))]
 
         # 2) Apply attention on all the projected vectors in batch.
-        x, attn = self.attention(q, k, v, dropout=self.dropout)
+        x = nn.functional.scaled_dot_product_attention(q, k, v)
 
         # 3) "Concat" using a view and apply a final linear.
         x = x.transpose(1, 2).contiguous().view(batch_size, -1, self.h * self.d_k)

@@ -1,5 +1,5 @@
 AggregateData:
   _target_: chess_gnn.tasks.AggregateData
-  data_directory: '/home/ray/datasets/chess/lichess_db_standard_rated_2017-02'
+  data_directory: '/home/ray/datasets/chess/lichess_db_standard_rated_2013-08'
   batch_size: 750
   include_draw: False

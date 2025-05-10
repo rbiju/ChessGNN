@@ -1,10 +1,9 @@
 from abc import ABC, abstractmethod
 from typing import Optional, Generator
 from pathlib import Path
+from uuid import uuid4
 
 import chess.pgn
-
-SITE_PREFIXES = {"lichess": 'https://lichess.org/'}
 
 
 class ChessBoardGetter(ABC):
@@ -17,9 +16,8 @@ class ChessBoardGetter(ABC):
 
 
 class LichessChessBoardGetter(ChessBoardGetter):
-    def __init__(self, pgn_file: Path, mode: str = 'lichess'):
+    def __init__(self, pgn_file: Path):
         super().__init__(pgn_file)
-        self.prefix = SITE_PREFIXES[mode]
         self.result_mapping = {'1-0': 0, '0-1': 1, '1/2-1/2': 2}
 
     @staticmethod
@@ -33,8 +31,7 @@ class LichessChessBoardGetter(ChessBoardGetter):
             if game is None or 'Result' not in game.headers or 'Site' not in game.headers:
                 return None
 
-            site = game.headers["Site"]
-            identifier = site.removeprefix(self.prefix)
+            identifier = str(uuid4())
             result = self.result_mapping.get(game.headers['Result'])
             if result is None:
                 return None
@@ -53,12 +50,8 @@ class LichessChessBoardGetter(ChessBoardGetter):
 
 
 class PGNBoardHelper:
-    def __init__(self, file: Path, mode: str = 'lichess'):
+    def __init__(self, file: Path):
         self.file = file
-        if mode not in SITE_PREFIXES.keys():
-            raise ValueError(f'Invalid mode: {mode}')
-
-        self.prefix = SITE_PREFIXES[mode]
         self.pgn = open(self.file, encoding="utf-8")
         self.game: Optional[chess.pgn.Game] = None
         self.eof = False
@@ -73,10 +66,6 @@ class PGNBoardHelper:
         self.game = chess.pgn.read_game(self.pgn)
         if self.game is None:
             self.eof = True
-
-    def get_unique_game_identifier(self) -> str:
-        site: str = self.game.headers["Site"]
-        return site.removeprefix(self.prefix)
 
     @staticmethod
     def process_board_string(board: str) -> str:

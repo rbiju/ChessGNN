@@ -195,3 +195,5 @@ class BERTLichessDataShuffler:
                     random.shuffle(buffer)
                     outfile.writelines(buffer)
                     pbar.update(len(buffer))
+
+        return str(self.output_file)

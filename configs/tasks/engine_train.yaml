@@ -1,46 +1,38 @@
-BERTTrain:
-  _target_: chess_gnn.tasks.BERTTrain
+EngineTrain:
+  _target_: chess_gnn.tasks.EngineTrain
+  bert_checkpoint: '/home/ray/lightning_checkpoints/chess_bert/5b08cbbb-8893-4d6c-865e-a9a08771c824/final.ckpt'
   model:
-    _target_: chess_gnn.models.ChessBERT
-    num_layers: 12
-    block:
-      _target_: chess_gnn.bert.TransformerBlock
-      pos_emb_mode: "learned"
-      hidden: 384
-      attn_heads: 16
-      feed_forward_hidden: 512
-      norm_factory:
-        _target_: chess_gnn.bert.utils.LayerNormFactory
-    tokenizer:
-      _target_: chess_gnn.tokenizers.SimpleChessTokenizer
-    mask_handler:
-      _target_: chess_gnn.bert.BERTMaskHandler
-      mask_prob: 0.15
+    _target_: chess_gnn.models.ChessXAttnEngine
+    _partial_: True
+    decoder_layer:
+      _target_: torch.nn.TransformerDecoderLayer
+      d_model: 512
+      nhead: 4
+      dim_feedforward: 768
+      dropout: 0.0
+      batch_first: True
+    n_decoder_layers: 4
     optimizer_factory:
       _target_: chess_gnn.optimizers.LambFactory
-      learning_rate: 1e-3
-      weight_decay: 1e-4
+      learning_rate: 5e-5
+      weight_decay: 1e-6
     lr_scheduler_factory:
       _target_: chess_gnn.lr_schedules.CosineAnnealingWarmupFactory
       T_0: 10000
       T_mult: 2
       warmup_steps: 1000
-    loss_weights:
-      _target_: chess_gnn.models.BERTLossWeights
-      masking: 1.0
-      win_prediction: 1.0
   datamodule:
     _target_: chess_gnn.data.BERTDataModule
-    data_directory: '/home/ray/datasets/chess/lumbras_2024'
-    batch_size: 1024
+    data_directory: '/home/ray/datasets/chess/lichess_db_standard_rated_2017-02'
+    batch_size: 512
     num_workers: 8
-    mode: 'bert'
+    mode: 'engine'
   trainer_factory:
     _target_: chess_gnn.trainer.TrainerFactory
     log_every_n_steps: 100
-    max_epochs: 3
+    max_epochs: 1
     accelerator: 'auto'
-    strategy: 'ddp'
+    strategy: 'ddp_find_unused_parameters_true'
     devices: 1
     precision: "bf16-mixed"
     check_val_every_n_epoch: 1
@@ -53,4 +45,4 @@ BERTTrain:
         _partial_: True
         save_last: True
         save_on_train_epoch_end: True
-        every_n_train_steps: 10000
+        every_n_train_steps: 5000

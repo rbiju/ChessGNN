@@ -46,10 +46,12 @@ class TrainerFactory:
                 if callback.func == pl.callbacks.model_checkpoint.ModelCheckpoint:
                     self.callbacks[i] = callback(ckpt_dir)
 
-    def resolve_logger(self):
+    def resolve_logger(self, project_name: Optional[str] = None):
         if self.logger is None:
             warnings.warn('Logger was not set, setting comet logger automatically')
-            self.logger = CometLogger(api_key=os.getenv('COMET_API_KEY'), project_name='chess_bert')
+            if project_name is None:
+                project_name = 'chess_bert'
+            self.logger = CometLogger(api_key=os.getenv('COMET_API_KEY'), project_name=project_name)
 
     def trainer(self) -> pl.Trainer:
         return pl.Trainer(accelerator=self.accelerator,

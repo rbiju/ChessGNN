@@ -29,7 +29,7 @@ class HDF5DatasetBuilder:
         except Exception:
             return None
 
-    def write_dataset(self, input_file: Path):
+    def write_dataset(self, input_file: str):
         input_file = Path(input_file)
         output_path = input_file.parent / "data.h5"
 

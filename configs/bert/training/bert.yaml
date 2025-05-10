@@ -3,10 +3,10 @@ ChessBERT:
   num_layers: 12
   block:
     _target_: chess_gnn.bert.TransformerBlock
-    pos_emb_mode: "relative"
-    hidden: 256
-    attn_heads: 8
-    feed_forward_hidden: 1024
+    pos_emb_mode: "learned"
+    hidden: 384
+    attn_heads: 16
+    feed_forward_hidden: 512
     norm_factory:
       _target_: chess_gnn.bert.utils.LayerNormFactory
   tokenizer:
@@ -16,11 +16,12 @@ ChessBERT:
     mask_prob: 0.15
   optimizer_factory:
     _target_: chess_gnn.optimizers.LambFactory
-    learning_rate: 1e-4
+    learning_rate: 1e-3
     weight_decay: 1e-4
   lr_scheduler_factory:
     _target_: chess_gnn.lr_schedules.CosineAnnealingWarmupFactory
     T_0: 10000
+    T_mult: 2
     warmup_steps: 1000
   loss_weights:
     _target_: chess_gnn.models.BERTLossWeights

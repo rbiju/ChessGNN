@@ -8,6 +8,7 @@ import pytorch_lightning as pl
 import torch
 from torch.nn import Parameter
 import torch.nn as nn
+from torchmetrics import Accuracy
 
 from typing import Iterable
 
@@ -39,6 +40,7 @@ class ChessBERT(pl.LightningModule):
                  mask_handler: BERTMaskHandler,
                  optimizer_factory: OptimizerFactory,
                  lr_scheduler_factory: LRSchedulerFactory,
+                 win_prediction_dropout: float = 0.,
                  loss_weights: BERTLossWeights = BERTLossWeights()):
         super().__init__()
         self.has_learned_pos_emb = False
@@ -53,10 +55,13 @@ class ChessBERT(pl.LightningModule):
 
         self.cls_token = torch.nn.Parameter(torch.rand(1, block.dim))
 
+        self.whose_move_embedding = nn.Parameter(torch.rand(2, block.dim))
+
         self.embedding_table = torch.nn.Parameter(torch.rand(tokenizer.vocab_size + 1, block.dim))
 
-        self.mlm_head = nn.Sequential(nn.Linear(block.dim, self.vocab_size))
-        self.win_prediction_head = Mlp(in_dim=block.dim, out_dim=1, hidden_dim=block.dim)
+        self.mlm_head = nn.Linear(block.dim, self.vocab_size)
+        self.win_prediction_head = Mlp(in_dim=block.dim, out_dim=1, dropout=win_prediction_dropout, hidden_dim=block.dim)
+        self.win_prediction_accuracy = Accuracy(task='binary', threshold=0.5)
 
         if block.pos_emb_mode == 'learned':
             self.has_learned_pos_emb = True
@@ -72,6 +77,7 @@ class ChessBERT(pl.LightningModule):
         self.lr_scheduler_factory = lr_scheduler_factory
 
         self.initialize_weights()
+        self.save_hyperparameters(ignore=['block', 'mask_handler'])
 
     def initialize_weights(self):
         torch.nn.init.trunc_normal_(self.cls_token, std=0.02)
@@ -86,16 +92,16 @@ class ChessBERT(pl.LightningModule):
 
     @staticmethod
     def squeeze_batch(batch):
-        return {'board': batch['board'].squeeze(),
-                'label': batch['label'].squeeze()}
+        return {key: batch[key].squeeze() for key in batch}
 
-    def forward(self, x: torch.Tensor) -> dict[str, torch.Tensor]:
+    def forward(self, x: torch.Tensor, whose_move: torch.Tensor) -> dict[str, torch.Tensor]:
         x_ = self.embedding_table[x]
         cls_token = repeat(self.cls_token, 'l e -> b l e', b=x.shape[0])
         x_ = torch.concat([cls_token, x_], dim=1)
+        x_ = x_ + self.whose_move_embedding[whose_move].unsqueeze(1)
 
         if self.has_learned_pos_emb:
-            x_ = repeat(self.pos_emb, 'l e -> b l e', b=x.shape[0]) + x_
+            x_ = x_ + self.pos_emb.unsqueeze(0)
 
         for block in self.encoder:
             x_ = block(x_)
@@ -109,16 +115,16 @@ class ChessBERT(pl.LightningModule):
                 'tokens': x_[:, 1:, :],
                 'win_probability': win_prob}
 
-    def forward_mask(self, x: torch.Tensor) -> dict[str, torch.Tensor]:
+    def forward_mask(self, x: torch.Tensor, whose_move: torch.Tensor) -> dict[str, torch.Tensor]:
         x, labels = self.mask_handler(x)
 
-        out = self(x)
+        out = self(x, whose_move)
 
         return {**out, 'masked_token_labels': labels}
 
     def calculate_loss(self, batch):
         batch = self.squeeze_batch(batch)
-        out = self.forward_mask(batch['board'])
+        out = self.forward_mask(batch['board'], batch['whose_move'])
 
         mlm_preds = self.mlm_head(out['tokens'])
         mlm_preds = einops.rearrange(mlm_preds, 'b l c -> b c l')
@@ -126,6 +132,7 @@ class ChessBERT(pl.LightningModule):
         mask_loss = self.masking_loss(mlm_preds, out['masked_token_labels'])
 
         win_prediction_loss = self.win_prediction_loss(out['win_probability'], batch['label'])
+        self.win_prediction_accuracy.update(out['win_probability'], batch['label'])
 
         loss = (self.loss_weights.masking * mask_loss +
                 self.loss_weights.win_prediction * win_prediction_loss)
@@ -137,6 +144,7 @@ class ChessBERT(pl.LightningModule):
 
         self.log("train_masking_loss", loss['mask_loss'], on_step=True, sync_dist=True)
         self.log("train_win_prediction_loss", loss['win_prediction_loss'], on_step=True, sync_dist=True)
+        self.log("train_win_prediction_accuracy", self.win_prediction_accuracy, on_step=True, sync_dist=True)
         self.log("loss", loss['loss'], prog_bar=True, on_step=True, sync_dist=True)
 
         return loss
@@ -146,6 +154,7 @@ class ChessBERT(pl.LightningModule):
 
         self.log("val_masking_loss", loss['mask_loss'], sync_dist=True)
         self.log("val_win_prediction_loss", loss['win_prediction_loss'], sync_dist=True)
+        self.log("val_win_prediction_accuracy", self.win_prediction_accuracy, sync_dist=True)
         self.log("loss", loss['loss'], sync_dist=True)
 
         return loss

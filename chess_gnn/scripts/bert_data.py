@@ -1,22 +1,10 @@
-from torch.utils.data import DataLoader
-from chess_gnn.data.bert_data import MMapWinPredictionBERTDataset
-from chess_gnn.data import BERTDataModule
-
-from chess_gnn.models import ChessBERT
+from chess_gnn.models import ChessBERT, ChessXAttnEngine
 from chess_gnn.configuration import LocalHydraConfiguration
+from chess_gnn.data import HDF5ChessDataset
 
 import torch
+from torch.utils.data import DataLoader
 from pytorch_lightning.utilities.model_summary import ModelSummary
-
-
-def test_data():
-    file = '/Users/ray/Datasets/txt/test/train/shuffled.txt'
-    dataset = MMapWinPredictionBERTDataset(file)
-    dataloader = DataLoader(dataset, batch_size=64, num_workers=4)
-
-    batch = next(iter(dataloader))
-
-    return batch
 
 
 def model_test():
@@ -31,41 +19,53 @@ def model_dummy_forward():
     cfg = LocalHydraConfiguration('/Users/ray/Projects/ChessGNN/configs/bert/training/bert.yaml')
     model = ChessBERT.from_hydra_configuration(cfg)
 
+    ms = ModelSummary(model=model)
+    print(ms)
+
     batch = {'board': torch.randint(low=0, high=13, size=(4, 64)),
-             'label': torch.randint(low=0, high=2, size=(4,)).float()}
+             'label': torch.randint(low=0, high=2, size=(4,)).float(),
+             'whose_move': torch.randint(low=0, high=2, size=(4,))}
 
     out = model.calculate_loss(batch)
 
     return out
 
 
-def model_forward_test():
-    model = ChessBERT.from_hydra_configuration(LocalHydraConfiguration('/Users/ray/Projects/ChessGNN/configs/bert/training/bert.yaml'))
-
-    file = '/Users/ray/Datasets/txt/test/train/shuffled.txt'
-    dataset = MMapWinPredictionBERTDataset(file)
-    dataloader = DataLoader(dataset, batch_size=4, num_workers=2)
-
-    batch = next(iter(dataloader))
+def engine_dummy_forward():
+    cfg = LocalHydraConfiguration('/Users/ray/Projects/ChessGNN/configs/bert/training/engine.yaml')
+    model = ChessXAttnEngine.from_hydra_configuration(cfg)
 
     ms = ModelSummary(model=model)
     print(ms)
 
-    out = model(batch['board'])
+    batch = {'board': torch.randint(low=0, high=13, size=(4, 64)),
+             'label': torch.randint(low=0, high=2, size=(4,)).float(),
+             'from': torch.randint(low=0, high=64, size=(4,)),
+             'to': torch.randint(low=0, high=64, size=(4,)),
+             'whose_move': torch.randint(low=0, high=2, size=(4,))}
+
+    out = model.calculate_loss(batch)
 
     return out
 
 
-def test_datamodule():
-    dm = BERTDataModule(data_directory='/Users/ray/Datasets/txt/test', batch_size=4, num_workers=2)
-    train_dl = dm.train_dataloader()
-    val_dl = dm.val_dataloader()
+def test_engine_data():
+    file = '/home/ray/datasets/chess/Carlsen/test/data.h5'
+    dataset = HDF5ChessDataset(str(file), 4, mode='engine')
 
-    train_batch = next(iter(train_dl))
-    val_batch = next(iter(val_dl))
+    dl = DataLoader(dataset, batch_size=1, num_workers=1, shuffle=False)
+    batch = next(iter(dl))
 
-    return train_batch, val_batch
+    cfg = LocalHydraConfiguration('/home/ray/pycharm_projects/ChessGNN/configs/bert/training/engine.yaml')
+    model = ChessXAttnEngine.from_hydra_configuration(cfg)
+
+    ms = ModelSummary(model=model)
+    print(ms)
+
+    out = model.calculate_loss(batch)
+
+    return out
 
 
 if __name__ == '__main__':
-    test_data()
+    test_engine_data()

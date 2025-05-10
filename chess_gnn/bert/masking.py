@@ -26,27 +26,30 @@ class BERTMaskHandler(nn.Module):
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Args:
-            x: [B, T]
+            x: [B, T] input token IDs
 
         Returns:
-            masked_input_ids: [B, T] tensor with masking applied
-            labels: [B, T] original token IDs at masked positions, rest = ignore_index
+            masked_input_ids: [B, T] with some tokens replaced
+            labels: [B, T] with original token IDs at masked positions, else ignore_index
         """
         device = x.device
         labels = x.clone()
 
-        probability_matrix = torch.full(x.shape, self.mask_prob, device=device)
+        rand = torch.rand(x.shape, device=device)
+        masked_indices = rand < self.mask_prob
 
-        masked_indices = torch.bernoulli(probability_matrix).bool()
+        labels[~masked_indices] = self.ignore_index  # only predict masked positions
 
-        labels[~masked_indices] = self.ignore_index
-
+        # Apply BERT masking strategy
+        # 80% [MASK], 10% random token, 10% unchanged
         masked_input_ids = x.clone()
 
-        mask_mask = torch.bernoulli(torch.full(x.shape, 0.8, device=device)).bool() & masked_indices
+        mask_mask = masked_indices & (rand < self.mask_prob * 0.8)
+        random_mask = masked_indices & (rand >= self.mask_prob * 0.8) & (rand < self.mask_prob * 0.9)
+        # remaining 10% of masked_indices are left unchanged
+
         masked_input_ids[mask_mask] = self.mask_token_id
 
-        random_mask = torch.bernoulli(torch.full(x.shape, 0.5, device=device)).bool() & masked_indices & ~mask_mask
         random_tokens = torch.randint(low=0, high=self.vocab_size, size=x.shape, device=device)
         masked_input_ids[random_mask] = random_tokens[random_mask]
 
