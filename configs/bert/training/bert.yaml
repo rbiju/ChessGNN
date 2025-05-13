@@ -1,11 +1,11 @@
 ChessBERT:
   _target_: chess_gnn.models.ChessBERT
-  num_layers: 12
+  num_layers: 6
   block:
     _target_: chess_gnn.bert.TransformerBlock
     pos_emb_mode: "learned"
     hidden: 384
-    attn_heads: 16
+    attn_heads: 8
     feed_forward_hidden: 512
     norm_factory:
       _target_: chess_gnn.bert.utils.LayerNormFactory

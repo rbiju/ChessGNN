@@ -34,7 +34,7 @@ class RelativeMultiHeadAttention(nn.Module):
         final_mat = dist_mat + self.max_relative_position  # make all positive indices
         return final_mat
 
-    def forward(self, q, k, v):
+    def forward(self, q, k, v, get_attn: bool = False):
         B, L, _ = q.size()
 
         # Project input
@@ -66,4 +66,10 @@ class RelativeMultiHeadAttention(nn.Module):
 
         out = out_content + rel_out
         out = out.transpose(1, 2).contiguous().view(B, L, self.d_model)  # [B, L, d_model]
-        return self.out_proj(out)
+
+        out = self.out_proj(out)
+
+        if get_attn:
+            return self.out_proj(out), attn
+
+        return out

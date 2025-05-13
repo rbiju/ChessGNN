@@ -30,7 +30,7 @@ class MultiHeadedAttentionRoPE(nn.Module):
 
         self.dropout = nn.Dropout(p=dropout)
 
-    def forward(self, query, key, value):
+    def forward(self, query, key, value, get_attn: bool = False):
         batch_size = query.size(0)
 
         # 1) Do all the linear projections in batch from d_model => h x d_k
@@ -43,6 +43,9 @@ class MultiHeadedAttentionRoPE(nn.Module):
 
         # 3) "Concat" using a view and apply a final linear.
         x = x.transpose(1, 2).contiguous().view(batch_size, -1, self.h * self.d_k)
+
+        if get_attn:
+            return x, attn
 
         return self.output_linear(x)
 
@@ -67,11 +70,14 @@ class MultiHeadedAttention(nn.Module):
 
         self.dropout = nn.Dropout(p=dropout)
 
-    def forward(self, query, key, value):
+    def forward(self, query, key, value, get_attn: bool = False):
         batch_size = query.size(0)
 
         # 1) Do all the linear projections in batch from d_model => h x d_k
         q, k, v = [einops.rearrange(layer(x), 'b n (h d) -> b h n d', h=self.h) for layer, x in zip(self.linear_layers, (query, key, value))]
+
+        if get_attn:
+            return self.attention(query, key, value, dropout=self.dropout)
 
         # 2) Apply attention on all the projected vectors in batch.
         x = nn.functional.scaled_dot_product_attention(q, k, v)

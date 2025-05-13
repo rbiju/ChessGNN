@@ -60,7 +60,8 @@ class ChessBERT(pl.LightningModule):
         self.embedding_table = torch.nn.Parameter(torch.rand(tokenizer.vocab_size + 1, block.dim))
 
         self.mlm_head = nn.Linear(block.dim, self.vocab_size)
-        self.win_prediction_head = Mlp(in_dim=block.dim, out_dim=1, dropout=win_prediction_dropout, hidden_dim=block.dim)
+        self.win_prediction_head = Mlp(in_dim=block.dim, out_dim=1, dropout=win_prediction_dropout,
+                                       hidden_dim=block.dim)
         self.win_prediction_accuracy = Accuracy(task='binary', threshold=0.5)
 
         if block.pos_emb_mode == 'learned':
@@ -77,7 +78,7 @@ class ChessBERT(pl.LightningModule):
         self.lr_scheduler_factory = lr_scheduler_factory
 
         self.initialize_weights()
-        self.save_hyperparameters(ignore=['block', 'mask_handler'])
+        self.save_hyperparameters()
 
     def initialize_weights(self):
         torch.nn.init.trunc_normal_(self.cls_token, std=0.02)
@@ -94,7 +95,7 @@ class ChessBERT(pl.LightningModule):
     def squeeze_batch(batch):
         return {key: batch[key].squeeze() for key in batch}
 
-    def forward(self, x: torch.Tensor, whose_move: torch.Tensor) -> dict[str, torch.Tensor]:
+    def forward(self, x: torch.Tensor, whose_move: torch.Tensor, get_attn: bool = False) -> dict[str, torch.Tensor]:
         x_ = self.embedding_table[x]
         cls_token = repeat(self.cls_token, 'l e -> b l e', b=x.shape[0])
         x_ = torch.concat([cls_token, x_], dim=1)
@@ -103,24 +104,39 @@ class ChessBERT(pl.LightningModule):
         if self.has_learned_pos_emb:
             x_ = x_ + self.pos_emb.unsqueeze(0)
 
-        for block in self.encoder:
-            x_ = block(x_)
+        if get_attn:
+            attns = []
+            for block in self.encoder:
+                x_, attn = block(x_, get_attn)
+                attns.append(attn)
 
-        x_ = self.norm(x_)
+                x_ = self.norm(x_)
 
-        cls = x_[:, :1, :].squeeze()
-        win_prob = self.win_prediction_head(cls).squeeze()
+                cls = x_[:, :1, :].squeeze()
 
-        return {'cls': cls,
-                'tokens': x_[:, 1:, :],
-                'win_probability': win_prob}
+                return {'cls': cls,
+                        'tokens': x_[:, 1:, :],
+                        'attn_weights': attns}
+
+        else:
+            for block in self.encoder:
+                x_ = block(x_)
+
+            x_ = self.norm(x_)
+
+            cls = x_[:, :1, :].squeeze()
+
+            return {'cls': cls,
+                    'tokens': x_[:, 1:, :]}
 
     def forward_mask(self, x: torch.Tensor, whose_move: torch.Tensor) -> dict[str, torch.Tensor]:
         x, labels = self.mask_handler(x)
 
         out = self(x, whose_move)
 
-        return {**out, 'masked_token_labels': labels}
+        win_prob = self.win_prediction_head(out['cls']).squeeze()
+
+        return {**out, 'win_probability': win_prob, 'masked_token_labels': labels}
 
     def calculate_loss(self, batch):
         batch = self.squeeze_batch(batch)

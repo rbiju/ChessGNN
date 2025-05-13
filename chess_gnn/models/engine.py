@@ -49,7 +49,7 @@ class ChessXAttnEngine(pl.LightningModule):
 
         self.optimizer_factory = optimizer_factory
         self.lr_scheduler_factory = lr_scheduler_factory
-        self.save_hyperparameters(ignore=['bert', 'decoder_layer'])
+        self.save_hyperparameters()
 
     @staticmethod
     def squeeze_batch(batch):

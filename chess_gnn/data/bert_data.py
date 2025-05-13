@@ -2,7 +2,8 @@ import h5py
 
 import torch
 
-DATA_MODES = {'bert': ['board', 'whose_move', 'label'],
+DATA_MODES = {'ssl': ['board', 'whose_move'],
+              'bert': ['board', 'whose_move', 'label'],
               'engine': ['board', 'label', 'from', 'to', 'whose_move'], }
 DTYPES = {'board': torch.long,
           'whose_move': torch.long,

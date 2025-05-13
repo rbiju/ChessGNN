@@ -1,4 +1,4 @@
-from chess_gnn.models import ChessBERT, ChessXAttnEngine
+from chess_gnn.models import ChessBERT, ChessELECTRA, ChessXAttnEngine
 from chess_gnn.configuration import LocalHydraConfiguration
 from chess_gnn.data import HDF5ChessDataset
 
@@ -24,6 +24,21 @@ def model_dummy_forward():
 
     batch = {'board': torch.randint(low=0, high=13, size=(4, 64)),
              'label': torch.randint(low=0, high=2, size=(4,)).float(),
+             'whose_move': torch.randint(low=0, high=2, size=(4,))}
+
+    out = model.calculate_loss(batch)
+
+    return out
+
+
+def electra_dummy_forward():
+    cfg = LocalHydraConfiguration('/Users/ray/Projects/ChessGNN/configs/bert/training/electra.yaml')
+    model = ChessELECTRA.from_hydra_configuration(cfg)
+
+    ms = ModelSummary(model=model)
+    print(ms)
+
+    batch = {'board': torch.randint(low=0, high=13, size=(4, 64)),
              'whose_move': torch.randint(low=0, high=2, size=(4,))}
 
     out = model.calculate_loss(batch)
@@ -68,4 +83,4 @@ def test_engine_data():
 
 
 if __name__ == '__main__':
-    test_engine_data()
+    electra_dummy_forward()
