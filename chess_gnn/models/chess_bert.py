@@ -3,7 +3,6 @@ from dataclasses import dataclass
 
 import einops
 from einops import repeat
-import pytorch_lightning as pl
 
 import torch
 from torch.nn import Parameter
@@ -17,6 +16,49 @@ from chess_gnn.configuration import HydraConfigurable
 from chess_gnn.optimizers import OptimizerFactory
 from chess_gnn.lr_schedules.lr_schedules import LRSchedulerFactory
 from chess_gnn.tokenizers import ChessTokenizer
+
+from .base import ChessBackbone, ChessEncoder
+
+
+class ChessBERTEncoder(ChessEncoder):
+    def __init__(self, bert: "ChessBERT"):
+        super().__init__()
+        self.encoder = bert.encoder
+        self.norm = bert.norm
+        self.dim = bert.dim
+
+        self.cls_token = bert.cls_token
+        self.whose_move_embedding = bert.whose_move_embedding
+        self.embedding_table = bert.embedding_table
+
+        self.pos_emb = bert.pos_emb
+
+    def forward(self, x: torch.Tensor, whose_move: torch.Tensor, get_attn: bool = False) -> dict[str, torch.Tensor]:
+        x_ = self.embedding_table[x]
+        cls_token = self.cls_token.unsqueeze(0).expand(x_.size(0), -1, -1)
+        x_ = torch.cat([cls_token, x_], dim=1)
+        x_ = x_ + self.whose_move_embedding[whose_move].unsqueeze(1)
+        x_ = x_ + self.pos_emb.unsqueeze(0)
+
+        if get_attn:
+            attns = []
+            for block in self.encoder:
+                x_, attn = block(x_, get_attn)
+                attns.append(attn)
+            x_ = self.norm(x_)
+            cls = x_[:, :1, :].squeeze(1)
+
+            return {'cls': cls,
+                    'tokens': x_[:, 1:, :],
+                    'attns': attns}
+        else:
+            for block in self.encoder:
+                x_ = block(x_)
+            x_ = self.norm(x_)
+            cls = x_[:, :1, :].squeeze(1)
+
+            return {'cls': cls,
+                    'tokens': x_[:, 1:, :]}
 
 
 @dataclass
@@ -33,7 +75,7 @@ class BERTLossWeights:
 
 
 @HydraConfigurable
-class ChessBERT(pl.LightningModule):
+class ChessBERT(ChessBackbone):
     def __init__(self, num_layers: int,
                  block: TransformerBlock,
                  tokenizer: ChessTokenizer,
@@ -91,6 +133,9 @@ class ChessBERT(pl.LightningModule):
             nn.init.constant_(module.bias, 0)
             nn.init.constant_(module.weight, 1.0)
 
+    def get_encoder(self):
+        return ChessBERTEncoder(self)
+
     @staticmethod
     def squeeze_batch(batch):
         return {key: batch[key].squeeze() for key in batch}
@@ -110,13 +155,13 @@ class ChessBERT(pl.LightningModule):
                 x_, attn = block(x_, get_attn)
                 attns.append(attn)
 
-                x_ = self.norm(x_)
+            x_ = self.norm(x_)
 
-                cls = x_[:, :1, :].squeeze()
+            cls = x_[:, :1, :].squeeze()
 
-                return {'cls': cls,
-                        'tokens': x_[:, 1:, :],
-                        'attn_weights': attns}
+            return {'cls': cls,
+                    'tokens': x_[:, 1:, :],
+                    'attn_weights': attns}
 
         else:
             for block in self.encoder:

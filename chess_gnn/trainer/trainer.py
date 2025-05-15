@@ -20,7 +20,7 @@ class TrainerFactory:
                  max_epochs: int = 200,
                  log_every_n_steps: int = 250,
                  num_sanity_val_steps: int = 1,
-                 check_val_every_n_epoch: int = 1,
+                 check_val_every_n_epoch=None,
                  **kwargs):
         self.accelerator = accelerator
         self.devices = devices

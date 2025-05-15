@@ -8,22 +8,24 @@ from pytorch_lightning import Trainer, seed_everything
 
 from chess_gnn.data import BERTDataModule
 from chess_gnn.trainer import TrainerFactory
-from chess_gnn.models import ChessXAttnEngine, ChessBERT
+from chess_gnn.models import ChessBackbone, ChessXAttnEngine
 
 from chess_gnn.configuration import HydraConfigurable, LocalHydraConfiguration
+from chess_gnn.loaders import CheckpointLoader
 from chess_gnn.tasks.base import Task, get_config_path
 
 
 @HydraConfigurable
 class EngineTrain(Task):
-    def __init__(self, model: ChessXAttnEngine, datamodule: BERTDataModule, trainer_factory: TrainerFactory, bert_checkpoint: Optional[str] = None):
+    def __init__(self, model: ChessXAttnEngine, datamodule: BERTDataModule, trainer_factory: TrainerFactory, checkpoint_loader: Optional[CheckpointLoader] = None):
         super().__init__()
         seed_everything(42)
         torch.set_float32_matmul_precision('medium')
 
-        if bert_checkpoint:
-            bert = ChessBERT.load_from_checkpoint(checkpoint_path=bert_checkpoint)
-            model = model(bert)
+        if checkpoint_loader:
+            backbone = checkpoint_loader.load()
+            encoder = backbone.get_encoder()
+            model = model(encoder)
 
         self.model = model
         self.datamodule = datamodule

@@ -37,7 +37,7 @@ class TransformerBlock(nn.Module):
 
     def forward(self, x, get_attn: bool = False):
         if get_attn:
-            x, attn = self.input_sublayer(x, lambda _x: self.attention.forward(_x, _x, _x, get_attn=get_attn))
+            x, attn = self.input_sublayer(x, lambda _x: self.attention.forward(_x, _x, _x, get_attn=get_attn), get_attn=get_attn)
             x = self.output_sublayer(x, self.feed_forward)
             return x, attn
         else:

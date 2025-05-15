@@ -21,7 +21,7 @@ class BERTDataModule(LightningDataModule):
         file = self.data_directory / 'train' / self.file_name
         dataset = HDF5ChessDataset(str(file), self.batch_size, mode=self.mode)
 
-        return DataLoader(dataset, batch_size=1, num_workers=self.num_workers, shuffle=False, persistent_workers=True, pin_memory=True, prefetch_factor=self.prefetch_factor)
+        return DataLoader(dataset, batch_size=1, num_workers=self.num_workers, shuffle=True, persistent_workers=True, pin_memory=True, prefetch_factor=self.prefetch_factor)
 
     def val_dataloader(self):
         file = self.data_directory / 'val' / self.file_name

@@ -1,12 +1,14 @@
 EngineTrain:
   _target_: chess_gnn.tasks.EngineTrain
-  bert_checkpoint: '/home/ray/lightning_checkpoints/chess_bert/5b08cbbb-8893-4d6c-865e-a9a08771c824/final.ckpt'
+  checkpoint_loader:
+    _target_: chess_gnn.loaders.BERTCheckpointLoader
+    ckpt_path: "/home/ray/lightning_checkpoints/chess_bert/7b961c05-55bf-45a0-8090-1409a883d676/final.ckpt"
   model:
     _target_: chess_gnn.models.ChessXAttnEngine
     _partial_: True
     decoder_layer:
       _target_: torch.nn.TransformerDecoderLayer
-      d_model: 512
+      d_model: 384
       nhead: 4
       dim_feedforward: 768
       dropout: 0.0
@@ -23,19 +25,19 @@ EngineTrain:
       warmup_steps: 1000
   datamodule:
     _target_: chess_gnn.data.BERTDataModule
-    data_directory: '/home/ray/datasets/chess/lichess_db_standard_rated_2017-02'
+    data_directory: '/home/ray/datasets/chess/Carlsen'
     batch_size: 512
     num_workers: 8
     mode: 'engine'
   trainer_factory:
     _target_: chess_gnn.trainer.TrainerFactory
     log_every_n_steps: 100
-    max_epochs: 1
+    max_epochs: 80
     accelerator: 'auto'
     strategy: 'ddp_find_unused_parameters_true'
     devices: 1
     precision: "bf16-mixed"
-    check_val_every_n_epoch: 1
+    check_val_every_n_epoch: 4
     num_sanity_val_steps: 1
     callbacks:
       - _target_: pytorch_lightning.callbacks.TQDMProgressBar
@@ -44,5 +46,3 @@ EngineTrain:
       - _target_: pytorch_lightning.callbacks.ModelCheckpoint
         _partial_: True
         save_last: True
-        save_on_train_epoch_end: True
-        every_n_train_steps: 5000

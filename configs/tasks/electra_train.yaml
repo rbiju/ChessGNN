@@ -1,6 +1,6 @@
 EngineTrain:
   _target_: chess_gnn.tasks.ELECTRATrain
-  bert_checkpoint: '/home/ray/lightning_checkpoints/chess_bert/269807d6-7beb-4e98-9a82-4b6e611ee3f1/final.ckpt'
+  bert_checkpoint: '/home/ray/lightning_checkpoints/chess_bert/06f942ca-25aa-4188-8e05-5c352ad13b0b/last.ckpt'
   model:
     _target_: chess_gnn.models.ChessELECTRA
     _partial_: True
@@ -10,17 +10,17 @@ EngineTrain:
       block:
         _target_: chess_gnn.bert.TransformerBlock
         pos_emb_mode: "learned"
-        hidden: 384
-        attn_heads: 8
-        feed_forward_hidden: 512
+        hidden: 512
+        attn_heads: 16
+        feed_forward_hidden: 768
         norm_factory:
           _target_: chess_gnn.bert.utils.LayerNormFactory
     mask_handler:
       _target_: chess_gnn.bert.ElectraMaskHandler
     optimizer_factory:
       _target_: chess_gnn.optimizers.LambFactory
-      learning_rate: 5e-5
-      weight_decay: 1e-6
+      learning_rate: 5e-4
+      weight_decay: 1e-5
     lr_scheduler_factory:
       _target_: chess_gnn.lr_schedules.CosineAnnealingWarmupFactory
       T_0: 10000
@@ -40,7 +40,7 @@ EngineTrain:
     strategy: 'ddp_find_unused_parameters_true'
     devices: 1
     precision: "bf16-mixed"
-    check_val_every_n_epoch: 1
+    val_check_interval: 0.2
     num_sanity_val_steps: 1
     callbacks:
       - _target_: pytorch_lightning.callbacks.TQDMProgressBar
@@ -50,4 +50,4 @@ EngineTrain:
         _partial_: True
         save_last: True
         save_on_train_epoch_end: True
-        every_n_train_steps: 5000
+        every_n_train_steps: 2500

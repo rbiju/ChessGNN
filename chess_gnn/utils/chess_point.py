@@ -10,6 +10,15 @@ class ChessPoint(NamedTuple):
     def from_1d(cls, idx: int) -> "ChessPoint":
         return cls(idx % 8, idx // 8)
 
+    @classmethod
+    def from_square(cls, square: str) -> "ChessPoint":
+        if len(square) != 2 or square[0] not in 'abcdefgh' or square[1] not in '12345678':
+            raise ValueError(f"Invalid square notation: {square}")
+
+        file = ord(square[0]) - ord('a')
+        rank = int(square[1]) - 1
+        return cls(file, rank)
+
     def to_1d(self) -> int:
         return self.x + self.y * 8
 

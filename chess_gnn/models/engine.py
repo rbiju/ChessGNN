@@ -1,14 +1,31 @@
 import copy
+from dataclasses import dataclass
 from typing import Iterable
 
 import torch
 import torch.nn as nn
 import pytorch_lightning as pl
 
-from .chess_bert import ChessBERT
+from chess_gnn.bert import Mlp
 from chess_gnn.configuration import HydraConfigurable
 from chess_gnn.optimizers import OptimizerFactory
 from chess_gnn.lr_schedules.lr_schedules import LRSchedulerFactory
+
+from .base import ChessEncoder
+
+
+@dataclass
+class EngineLossWeights:
+    from_loss: float = 1.0
+    to_loss: float = 1.0
+    win_prediction_loss: float = 1.0
+
+    def __post_init__(self):
+        self.validate()
+
+    def validate(self):
+        if self.from_loss < 0 or self.to_loss < 0 or self.win_prediction_loss < 0:
+            raise ValueError(f"Loss proportions must be positive: {self.from_loss, self.to_loss, self.win_prediction_loss}.")
 
 
 class MovePredictionXAttnHead(nn.Module):
@@ -31,24 +48,30 @@ class MovePredictionXAttnHead(nn.Module):
 @HydraConfigurable
 class ChessXAttnEngine(pl.LightningModule):
     def __init__(self,
-                 bert: ChessBERT,
+                 encoder: ChessEncoder,
                  decoder_layer: nn.TransformerDecoderLayer,
                  n_decoder_layers: int,
                  optimizer_factory: OptimizerFactory,
-                 lr_scheduler_factory: LRSchedulerFactory):
+                 lr_scheduler_factory: LRSchedulerFactory,
+                 loss_weights: EngineLossWeights = EngineLossWeights(),):
         super().__init__()
-        if not bert.has_learned_pos_emb:
-            raise ValueError("Currently only configured for BERT models with learned positional embeddings.")
-        self.bert = bert
-        self.from_head = MovePredictionXAttnHead(in_dim=bert.dim, decoder_layer=copy.deepcopy(decoder_layer),
+        self.encoder = encoder
+        self.dim = encoder.dim
+        self.from_head = MovePredictionXAttnHead(in_dim=self.dim, decoder_layer=copy.deepcopy(decoder_layer),
                                                  num_layers=n_decoder_layers)
-        self.to_head = MovePredictionXAttnHead(in_dim=bert.dim, decoder_layer=copy.deepcopy(decoder_layer),
+        self.to_head = MovePredictionXAttnHead(in_dim=self.dim, decoder_layer=copy.deepcopy(decoder_layer),
                                                num_layers=n_decoder_layers)
+        self.win_prediction_head = Mlp(in_dim=self.dim, out_dim=1, dropout=0.1,
+                                       hidden_dim=self.dim)
 
         self.move_loss = nn.CrossEntropyLoss()
+        self.win_prediction_loss = nn.BCEWithLogitsLoss()
 
         self.optimizer_factory = optimizer_factory
         self.lr_scheduler_factory = lr_scheduler_factory
+
+        self.loss_weights = loss_weights
+
         self.save_hyperparameters()
 
     @staticmethod
@@ -56,15 +79,17 @@ class ChessXAttnEngine(pl.LightningModule):
         return {key: batch[key].squeeze() for key in batch}
 
     def forward(self, x: torch.Tensor, whose_move: torch.Tensor) -> dict[str, torch.Tensor]:
-        out = self.bert(x, whose_move)
+        out = self.encoder(x, whose_move)
 
         from_prediction = self.from_head(out['cls'].unsqueeze(1), out['tokens'])
         to_prediction = self.to_head(out['cls'].unsqueeze(1), out['tokens'])
+        win_prediction = self.win_prediction_head(out['cls'])
 
         return {'cls': out['cls'],
+                'tokens': out['tokens'],
                 'from': from_prediction.squeeze(),
                 'to': to_prediction.squeeze(),
-                'win_probability': out['win_probability']}
+                'win_probability': win_prediction.squeeze()}
 
     def calculate_loss(self, batch):
         batch = self.squeeze_batch(batch)
@@ -74,12 +99,16 @@ class ChessXAttnEngine(pl.LightningModule):
         from_loss = self.move_loss(out['from'], batch['from'])
         to_loss = self.move_loss(out['to'], batch['to'])
 
-        win_prediction_loss = self.bert.win_prediction_loss(out['win_probability'], batch['label'])
+        win_prediction_loss = self.win_prediction_loss(out['win_probability'], batch['label'])
+
+        loss = (self.loss_weights.from_loss * from_loss +
+                self.loss_weights.to_loss * to_loss +
+                self.loss_weights.win_prediction_loss * win_prediction_loss)
 
         return {'from_loss': from_loss,
                 'to_loss': to_loss,
                 'win_prediction_loss': win_prediction_loss,
-                'loss': from_loss + to_loss + win_prediction_loss}
+                'loss': loss}
 
     def training_step(self, batch, batch_idx):
         loss = self.calculate_loss(batch)

@@ -1,4 +1,4 @@
-from chess_gnn.models import ChessBERT, ChessELECTRA, ChessXAttnEngine
+from chess_gnn.models import ChessBERT, ChessELECTRA, ChessXAttnEngine, ChessElectraEncoder
 from chess_gnn.configuration import LocalHydraConfiguration
 from chess_gnn.data import HDF5ChessDataset
 
@@ -82,5 +82,22 @@ def test_engine_data():
     return out
 
 
+def test_electra_encoder():
+    cfg = LocalHydraConfiguration('/Users/ray/Projects/ChessGNN/configs/bert/training/electra.yaml')
+    model = ChessELECTRA.from_hydra_configuration(cfg)
+
+    ms = ModelSummary(model=model)
+    print(ms)
+
+    encoder = ChessElectraEncoder(electra=model)
+
+    batch = {'board': torch.randint(low=0, high=13, size=(4, 64)),
+             'whose_move': torch.randint(low=0, high=2, size=(4,))}
+
+    out = encoder(batch['board'], batch['whose_move'], get_attn=True)
+
+    return out
+
+
 if __name__ == '__main__':
-    electra_dummy_forward()
+    test_electra_encoder()

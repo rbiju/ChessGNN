@@ -77,7 +77,7 @@ class MultiHeadedAttention(nn.Module):
         q, k, v = [einops.rearrange(layer(x), 'b n (h d) -> b h n d', h=self.h) for layer, x in zip(self.linear_layers, (query, key, value))]
 
         if get_attn:
-            return self.attention(query, key, value, dropout=self.dropout)
+            return self.attention(query, key, value)
 
         # 2) Apply attention on all the projected vectors in batch.
         x = nn.functional.scaled_dot_product_attention(q, k, v)
