@@ -19,8 +19,16 @@ class ChessPoint(NamedTuple):
         rank = int(square[1]) - 1
         return cls(file, rank)
 
+    def to_square(self) -> str:
+        file = 'abcdefgh'[self.x]
+        rank = int(self.y) + 1
+        return f"{file}{rank}"
+
     def to_1d(self) -> int:
         return self.x + self.y * 8
+
+    def to_str_position(self) -> int:
+        return self.x + (7 - self.y) * 8
 
     def __add__(self, other: "ChessPoint") -> "ChessPoint":
         return ChessPoint(self.x + other.x, self.y + other.y)

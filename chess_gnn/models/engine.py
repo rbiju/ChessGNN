@@ -4,14 +4,33 @@ from typing import Iterable
 
 import torch
 import torch.nn as nn
-import pytorch_lightning as pl
 
 from chess_gnn.bert import Mlp
 from chess_gnn.configuration import HydraConfigurable
 from chess_gnn.optimizers import OptimizerFactory
 from chess_gnn.lr_schedules.lr_schedules import LRSchedulerFactory
 
-from .base import ChessEncoder
+from .base import ChessEncoder, ChessEngineEncoder, ChessEngine
+
+
+class ChessXAttnEncoder(ChessEngineEncoder):
+    def __init__(self, engine: "ChessXAttnEngine"):
+        super().__init__()
+        self.encoder = engine.encoder
+        self.from_head = engine.from_head
+        self.to_head = engine.to_head
+        self.win_prediction_head = engine.win_prediction_head
+
+    def forward(self, x: torch.Tensor, whose_move: torch.Tensor, get_attn: bool = False) -> dict[str, torch.Tensor]:
+        out = self.encoder(x, whose_move, get_attn)
+        from_prediction = self.from_head(out['cls'].unsqueeze(1), out['tokens'])
+        to_prediction = self.to_head(out['cls'].unsqueeze(1), out['tokens'])
+        win_prediction = self.win_prediction_head(out['cls'])
+
+        return {**out,
+                'from': from_prediction.squeeze(),
+                'to': to_prediction.squeeze(),
+                'win_probability': win_prediction.squeeze()}
 
 
 @dataclass
@@ -25,7 +44,8 @@ class EngineLossWeights:
 
     def validate(self):
         if self.from_loss < 0 or self.to_loss < 0 or self.win_prediction_loss < 0:
-            raise ValueError(f"Loss proportions must be positive: {self.from_loss, self.to_loss, self.win_prediction_loss}.")
+            raise ValueError(
+                f"Loss proportions must be positive: {self.from_loss, self.to_loss, self.win_prediction_loss}.")
 
 
 class MovePredictionXAttnHead(nn.Module):
@@ -46,14 +66,14 @@ class MovePredictionXAttnHead(nn.Module):
 
 
 @HydraConfigurable
-class ChessXAttnEngine(pl.LightningModule):
+class ChessXAttnEngine(ChessEngine):
     def __init__(self,
                  encoder: ChessEncoder,
                  decoder_layer: nn.TransformerDecoderLayer,
                  n_decoder_layers: int,
                  optimizer_factory: OptimizerFactory,
                  lr_scheduler_factory: LRSchedulerFactory,
-                 loss_weights: EngineLossWeights = EngineLossWeights(),):
+                 loss_weights: EngineLossWeights = EngineLossWeights(), ):
         super().__init__()
         self.encoder = encoder
         self.dim = encoder.dim
@@ -73,6 +93,9 @@ class ChessXAttnEngine(pl.LightningModule):
         self.loss_weights = loss_weights
 
         self.save_hyperparameters()
+
+    def get_encoder(self) -> ChessEncoder:
+        return ChessXAttnEncoder(self)
 
     @staticmethod
     def squeeze_batch(batch):

@@ -25,19 +25,19 @@ EngineTrain:
       warmup_steps: 1000
   datamodule:
     _target_: chess_gnn.data.BERTDataModule
-    data_directory: '/home/ray/datasets/chess/Carlsen'
+    data_directory: '/home/ray/datasets/chess/lumbras_2024'
     batch_size: 512
     num_workers: 8
     mode: 'engine'
   trainer_factory:
     _target_: chess_gnn.trainer.TrainerFactory
     log_every_n_steps: 100
-    max_epochs: 80
+    max_epochs: 1
     accelerator: 'auto'
     strategy: 'ddp_find_unused_parameters_true'
     devices: 1
     precision: "bf16-mixed"
-    check_val_every_n_epoch: 4
+    val_check_interval: 10_000
     num_sanity_val_steps: 1
     callbacks:
       - _target_: pytorch_lightning.callbacks.TQDMProgressBar
@@ -46,3 +46,4 @@ EngineTrain:
       - _target_: pytorch_lightning.callbacks.ModelCheckpoint
         _partial_: True
         save_last: True
+        every_n_train_steps: 2500

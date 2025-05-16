@@ -71,11 +71,14 @@ class PGNBoardHelper:
     def process_board_string(board: str) -> str:
         return str(board).replace('\n', ' ').replace(" ", "")
 
-    def get_board_strings(self) -> Generator[str, None, None]:
+    def get_board_fens(self) -> list[str]:
         board = self.game.board()
+        boards = []
         for move in self.game.mainline_moves():
+            boards.append(board.fen())
             board.push(move)
-            yield self.process_board_string(str(board))
+
+        return boards
 
     def result(self) -> int:
         return self.result_mapping[self.game.headers['Result']]
