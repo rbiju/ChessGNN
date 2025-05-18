@@ -4,7 +4,7 @@ ChessBERT:
   block:
     _target_: chess_gnn.bert.TransformerBlock
     pos_emb_mode: "learned"
-    hidden: 384
+    hidden: 256
     attn_heads: 16
     feed_forward_hidden: 512
     norm_factory:

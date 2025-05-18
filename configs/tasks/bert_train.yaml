@@ -2,7 +2,7 @@ BERTTrain:
   _target_: chess_gnn.tasks.BERTTrain
   model:
     _target_: chess_gnn.models.ChessBERT
-    num_layers: 6
+    num_layers: 8
     block:
       _target_: chess_gnn.bert.TransformerBlock
       pos_emb_mode: "learned"
@@ -15,7 +15,7 @@ BERTTrain:
       _target_: chess_gnn.tokenizers.SimpleChessTokenizer
     mask_handler:
       _target_: chess_gnn.bert.BERTMaskHandler
-      mask_prob: 0.15
+      mask_prob: 0.25
     optimizer_factory:
       _target_: chess_gnn.optimizers.LambFactory
       learning_rate: 1e-3

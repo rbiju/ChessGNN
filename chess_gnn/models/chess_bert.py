@@ -9,7 +9,7 @@ from torch.nn import Parameter
 import torch.nn as nn
 from torchmetrics import Accuracy
 
-from typing import Iterable
+from typing import Iterable, Optional
 
 from chess_gnn.bert import TransformerBlock, BERTMaskHandler, Mlp
 from chess_gnn.configuration import HydraConfigurable
@@ -80,8 +80,8 @@ class ChessBERT(ChessBackbone):
                  block: TransformerBlock,
                  tokenizer: ChessTokenizer,
                  mask_handler: BERTMaskHandler,
-                 optimizer_factory: OptimizerFactory,
-                 lr_scheduler_factory: LRSchedulerFactory,
+                 optimizer_factory: Optional[OptimizerFactory] = None,
+                 lr_scheduler_factory: Optional[LRSchedulerFactory] = None,
                  win_prediction_dropout: float = 0.,
                  loss_weights: BERTLossWeights = BERTLossWeights()):
         super().__init__()

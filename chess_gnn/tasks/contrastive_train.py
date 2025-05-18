@@ -8,15 +8,15 @@ from pytorch_lightning import Trainer, seed_everything
 
 from chess_gnn.data import BERTDataModule
 from chess_gnn.trainer import TrainerFactory
-from chess_gnn.models import ChessELECTRA, ChessBERT
+from chess_gnn.models import ChessContrastiveBackbone, ChessBERT
 
 from chess_gnn.configuration import HydraConfigurable, LocalHydraConfiguration
 from chess_gnn.tasks.base import Task, get_config_path
 
 
 @HydraConfigurable
-class ELECTRATrain(Task):
-    def __init__(self, model: ChessELECTRA, datamodule: BERTDataModule, trainer_factory: TrainerFactory, bert_checkpoint: Optional[str] = None):
+class ContrastiveTrain(Task):
+    def __init__(self, model: ChessContrastiveBackbone, datamodule: BERTDataModule, trainer_factory: TrainerFactory, bert_checkpoint: Optional[str] = None):
         super().__init__()
         seed_everything(42)
         torch.set_float32_matmul_precision('medium')
@@ -30,14 +30,14 @@ class ELECTRATrain(Task):
 
         self.uid = str(uuid.uuid4())
 
-        ckpt_dir = Path('/home/ray/lightning_checkpoints/chess_electra') / self.uid
+        ckpt_dir = Path('/home/ray/lightning_checkpoints/chess_contrastive') / self.uid
         trainer_factory.resolve_checkpoint_callback(ckpt_dir=str(ckpt_dir))
-        trainer_factory.resolve_logger(project_name='chess-electra')
+        trainer_factory.resolve_logger(project_name='chess-contrastive')
 
         self.trainer: Trainer = trainer_factory.trainer()
 
     def run(self, configuration_path: str):
-        print(f"Saving engine in {self.uid}")
+        print(f"Saving backbone in {self.uid}")
         artifact = comet_ml.Artifact(name="configuration", artifact_type="ConfigurationFile")
         artifact.add(configuration_path)
         experiment: comet_ml.CometExperiment = self.trainer.logger.experiment
@@ -53,6 +53,6 @@ class ELECTRATrain(Task):
 
 
 if __name__ == '__main__':
-    config_path = get_config_path("ELECTRATrain")
-    task = ELECTRATrain.from_hydra_configuration(LocalHydraConfiguration(str(config_path)))
+    config_path = get_config_path("ContrastiveTrain")
+    task = ContrastiveTrain.from_hydra_configuration(LocalHydraConfiguration(str(config_path)))
     task.debug_run()

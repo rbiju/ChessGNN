@@ -12,7 +12,6 @@ from chess_gnn.bert import TransformerBlock, ElectraMaskHandler, Mlp
 from chess_gnn.configuration import HydraConfigurable
 from chess_gnn.optimizers import OptimizerFactory
 from chess_gnn.lr_schedules.lr_schedules import LRSchedulerFactory
-from chess_gnn.tokenizers import ChessTokenizer, SimpleChessTokenizer
 
 from .base import ChessBackbone, ChessEncoder
 from .chess_bert import ChessBERT
@@ -50,8 +49,8 @@ class ChessElectraEncoder(ChessEncoder):
 
 @dataclass
 class ELECTRALossWeights:
-    mlm: float = 2.0
-    discriminator: float = 1.0
+    mlm: float = 1.0
+    discriminator: float = 2.0
 
     def __post_init__(self):
         self.validate()
@@ -63,13 +62,11 @@ class ELECTRALossWeights:
 
 class ChessDiscriminator(nn.Module):
     def __init__(self, num_layers: int,
-                 block: TransformerBlock,
-                 tokenizer: ChessTokenizer = SimpleChessTokenizer(), ):
+                 block: TransformerBlock,):
         super().__init__()
         self.dim = block.dim
         self.num_layers = num_layers
         self.encoder = nn.ModuleList([copy.deepcopy(block) for _ in range(num_layers)])
-        self.vocab_size = tokenizer.vocab_size
 
         self.norm = nn.LayerNorm(block.dim)
 
@@ -111,10 +108,14 @@ class ChessELECTRA(ChessBackbone):
                  discriminator_dropout: float = 0.1, ):
         super().__init__()
         self.bert = bert
-        self.bert.mask_handler = mask_handler
+        self.mask_handler = mask_handler
         self.discriminator = discriminator
+        self.dim = discriminator.dim
 
-        self.dim = self.discriminator.dim
+        self.cls_token = nn.Parameter(torch.rand(1, self.dim))
+        self.embedding_table = torch.nn.Parameter(torch.rand(bert.vocab_size, self.dim))
+        self.whose_move_embedding = nn.Parameter(torch.rand(2, self.dim))
+        self.pos_embedding = nn.Parameter(torch.rand(65, self.dim))
 
         self.connector = nn.Linear(self.bert.dim, self.dim)
 
@@ -142,43 +143,36 @@ class ChessELECTRA(ChessBackbone):
     def squeeze_batch(batch):
         return {key: batch[key].squeeze() for key in batch}
 
-    def forward(self, x: torch.Tensor, whose_move: torch.Tensor) -> dict[str, torch.Tensor]:
-        out = self.bert(x, whose_move)
-        mlm_preds = self.bert.mlm_head(out['tokens'])
-        x_ = torch.concat([out['cls'].unsqueeze(1), out['tokens']], dim=1).detach()
-        x_ = self.connector(x_)
-
-        discriminator_out = self.discriminator(x_)
-
-        return {'cls': discriminator_out['cls'],
-                'mlm_preds': mlm_preds,
-                'tokens': discriminator_out['tokens']}
-
     def forward_mask(self, x: torch.Tensor, whose_move: torch.Tensor) -> dict[str, torch.Tensor]:
-        masked_input_ids, mask, mlm_labels = self.bert.mask_handler(x)
-        out = self(masked_input_ids, whose_move)
-
-        return {**out,
-                'masked_input_ids': masked_input_ids,
-                'mask': mask,
-                'mlm_labels': mlm_labels}
-
-    def calculate_loss(self, batch):
-        batch = self.squeeze_batch(batch)
-        b = batch['board'].shape[0]
-
-        out = self.forward_mask(batch['board'], batch['whose_move'])
+        masked_input_ids, mask, mlm_labels = self.mask_handler(x)
+        out = self.bert(masked_input_ids, whose_move)
+        mlm_preds = self.bert.mlm_head(out['tokens'])
 
         sampled_tokens = torch.multinomial(
             nn.functional.softmax(
-                einops.rearrange(out['mlm_preds'], 'b l e -> (b l) e'), dim=-1), num_samples=1).squeeze()
-        sampled_tokens = einops.rearrange(sampled_tokens, '(b l) -> b l', b=b)  # [B L]
-        mlm_preds = einops.rearrange(out['mlm_preds'], 'b l c -> b c l')
-        mask_loss = self.bert.masking_loss(mlm_preds, out['mlm_labels'])
+                einops.rearrange(mlm_preds, 'b l e -> (b l) e'), dim=-1), num_samples=1).squeeze()
+        sampled_tokens = einops.rearrange(sampled_tokens, '(b l) -> b l', b=x.shape[0]).detach()  # [B L]
+        sampled_tokens[~mask] = x[~mask]
 
-        discriminator_preds = self.discriminator_head(out['tokens']).squeeze()  # [B L]
-        sampled_tokens[~out['mask']] = batch['board'][~out['mask']]
-        discriminator_labels = torch.eq(sampled_tokens, batch['board']).float()
+        return {'mlm_labels': mlm_labels,
+                'sampled_tokens': sampled_tokens,
+                'mlm_preds': einops.rearrange(mlm_preds, 'b l c -> b c l')}
+
+    def forward(self, batch):
+        batch = self.squeeze_batch(batch)
+        mlm_out = self.forward_mask(batch['board'], batch['whose_move'])
+        mask_loss = self.bert.masking_loss(mlm_out['mlm_preds'], mlm_out['mlm_labels'])
+
+        discriminator_in = self.embedding_table[mlm_out['sampled_tokens']]
+        discriminator_in = discriminator_in
+        cls_token = einops.repeat(self.cls_token, 'l e -> b l e', b=batch['board'].shape[0])
+        discriminator_in = (torch.concat([cls_token, discriminator_in], dim=1) +
+                            self.whose_move_embedding[batch['whose_move']].unsqueeze(1) +
+                            self.pos_embedding.unsqueeze(0))
+        discriminator_out = self.discriminator(discriminator_in)
+
+        discriminator_preds = self.discriminator_head(discriminator_out['tokens']).squeeze()  # [B L]
+        discriminator_labels = torch.eq(mlm_out['sampled_tokens'], batch['board']).float()
         discriminator_loss = self.discriminator_loss(discriminator_preds, discriminator_labels)
 
         loss = (self.loss_weights.mlm * mask_loss +
@@ -187,7 +181,7 @@ class ChessELECTRA(ChessBackbone):
         return {'loss': loss, 'mask_loss': mask_loss, 'discriminator_loss': discriminator_loss}
 
     def training_step(self, batch, batch_idx):
-        loss = self.calculate_loss(batch)
+        loss = self(batch)
 
         self.log("train_masking_loss", loss['mask_loss'], on_step=True, sync_dist=True)
         self.log("train_discriminator_loss", loss['discriminator_loss'], on_step=True, sync_dist=True)
@@ -196,7 +190,7 @@ class ChessELECTRA(ChessBackbone):
         return loss
 
     def validation_step(self, batch, batch_idx):
-        loss = self.calculate_loss(batch)
+        loss = self(batch)
 
         self.log("val_masking_loss", loss['mask_loss'], sync_dist=True)
         self.log("val_discriminator_loss", loss['discriminator_loss'], sync_dist=True)

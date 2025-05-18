@@ -1,4 +1,4 @@
-from chess_gnn.models import ChessBERT, ChessELECTRA, ChessXAttnEngine, ChessElectraEncoder
+from chess_gnn.models import ChessBERT, ChessELECTRA, ChessXAttnEngine, ChessElectraEncoder, ChessContrastiveBackbone
 from chess_gnn.configuration import LocalHydraConfiguration
 from chess_gnn.data import HDF5ChessDataset
 
@@ -41,7 +41,7 @@ def electra_dummy_forward():
     batch = {'board': torch.randint(low=0, high=13, size=(4, 64)),
              'whose_move': torch.randint(low=0, high=2, size=(4,))}
 
-    out = model.calculate_loss(batch)
+    out = model(batch)
 
     return out
 
@@ -99,5 +99,20 @@ def test_electra_encoder():
     return out
 
 
+def contrastive_dummy_forward():
+    cfg = LocalHydraConfiguration('/Users/ray/Projects/ChessGNN/configs/bert/training/contrastive.yaml')
+    model = ChessContrastiveBackbone.from_hydra_configuration(cfg)
+
+    ms = ModelSummary(model=model)
+    print(ms)
+
+    batch = {'board': torch.randint(low=0, high=13, size=(4, 64)),
+             'whose_move': torch.randint(low=0, high=2, size=(4,))}
+
+    out = model.training_step(batch, 0)
+
+    return out
+
+
 if __name__ == '__main__':
-    test_electra_encoder()
+    contrastive_dummy_forward()

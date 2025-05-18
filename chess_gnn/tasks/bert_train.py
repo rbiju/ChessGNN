@@ -37,6 +37,7 @@ class BERTTrain(Task):
         artifact.add(configuration_path)
         experiment = self.trainer.logger.experiment
         experiment.log_artifact(artifact)
+        experiment.set_name(self.uid)
 
         model = torch.compile(self.model)
 

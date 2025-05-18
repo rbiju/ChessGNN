@@ -1,14 +1,14 @@
-EngineTrain:
+ContrastiveTrain:
   _target_: chess_gnn.tasks.ELECTRATrain
   model:
-    _target_: chess_gnn.models.ChessELECTRA
+    _target_: chess_gnn.models.ChessContrastiveBackbone
     bert:
       _target_: chess_gnn.models.ChessBERT
       num_layers: 6
       block:
         _target_: chess_gnn.bert.TransformerBlock
         pos_emb_mode: "learned"
-        hidden: 256
+        hidden: 384
         attn_heads: 8
         feed_forward_hidden: 512
         norm_factory:
@@ -17,7 +17,16 @@ EngineTrain:
         _target_: chess_gnn.tokenizers.SimpleChessTokenizer
       mask_handler:
         _target_: chess_gnn.bert.BERTMaskHandler
-        mask_prob: 0.50
+        mask_prob: 0.15
+      optimizer_factory:
+        _target_: chess_gnn.optimizers.LambFactory
+        learning_rate: 1e-3
+        weight_decay: 1e-4
+      lr_scheduler_factory:
+        _target_: chess_gnn.lr_schedules.CosineAnnealingWarmupFactory
+        T_0: 10000
+        T_mult: 2
+        warmup_steps: 1000
       loss_weights:
         _target_: chess_gnn.models.BERTLossWeights
         masking: 1.0
@@ -28,22 +37,36 @@ EngineTrain:
       block:
         _target_: chess_gnn.bert.TransformerBlock
         pos_emb_mode: "learned"
-        hidden: 384
+        hidden: &dim
+          512
         attn_heads: 8
-        feed_forward_hidden: 768
+        feed_forward_hidden: 512
         norm_factory:
           _target_: chess_gnn.bert.utils.LayerNormFactory
-    mask_handler:
+    student_mask_handler:
       _target_: chess_gnn.bert.ElectraMaskHandler
-      mask_prob: 0.40
+      mask_prob: 0.45
+    teacher_mask_handler:
+      _target_: chess_gnn.bert.ElectraMaskHandler
+      mask_prob: 0.15
+    clustering_head:
+      _target_: chess_gnn.models.OnlineClustering
+      in_dim: *dim
+      out_dim: 16
+      n_sk_iter: 3
+      target_temp: 0.06
+      pred_temp: 0.12
+    momentum: 0.99
     loss_weights:
-      _target_: chess_gnn.models.ELECTRALossWeights
+      _target_: chess_gnn.models.ContrastiveLossWeights
       mlm: 1.0
       discriminator: 2.0
+      contrastive: 0.25
+      clustering: 1.0
     optimizer_factory:
       _target_: chess_gnn.optimizers.LambFactory
-      learning_rate: 5e-4
-      weight_decay: 1e-5
+      learning_rate: 5e-5
+      weight_decay: 1e-6
     lr_scheduler_factory:
       _target_: chess_gnn.lr_schedules.CosineAnnealingWarmupFactory
       T_0: 10000
