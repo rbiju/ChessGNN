@@ -109,14 +109,19 @@ class ChessDINOComponent(nn.Module):
     def set_mask_handler(self, handler):
         self._mask_handler = handler
 
+    @staticmethod
+    def gumbel_sample(logits: torch.Tensor) -> torch.Tensor:
+        u = torch.rand_like(logits).clamp(min=1e-6)
+        gumbel_noise = -torch.log(-torch.log(u))
+        return (logits + gumbel_noise).argmax(dim=-1)
+
     def mlm_forward(self, x: torch.Tensor, whose_move: torch.Tensor) -> dict[str, torch.Tensor]:
         masked_input_ids, mask, mlm_labels = self.mask_handler(x)
         out = self.generator(masked_input_ids, whose_move)
 
-        sampled_tokens = torch.multinomial(
-            nn.functional.softmax(
-                einops.rearrange(out['mlm_preds'], 'b l e -> (b l) e'), dim=-1), num_samples=1).squeeze()
-        sampled_tokens = einops.rearrange(sampled_tokens, '(b l) -> b l', b=x.shape[0]).detach()  # [B L]
+        flat_logits = einops.rearrange(out['mlm_preds'], 'b l e -> (b l) e')
+        sampled_tokens = self.gumbel_sample(flat_logits)
+        sampled_tokens = einops.rearrange(sampled_tokens, '(b l) -> b l', b=x.shape[0]).detach()
         sampled_tokens[~mask] = x[~mask]
 
         return {'mlm_labels': mlm_labels,
@@ -191,15 +196,6 @@ class ChessContrastiveBackbone(ChessBackbone):
     def squeeze_batch(batch):
         return {key: batch[key].squeeze() for key in batch}
 
-    @staticmethod
-    def get_mlm_preds(mlm_softmax: torch.Tensor) -> torch.Tensor:
-        b = mlm_softmax.size(0)
-        sampled_tokens = torch.multinomial(
-            nn.functional.softmax(
-                einops.rearrange(mlm_softmax, 'b l c -> (b l) c'), dim=-1), num_samples=1).squeeze()
-        sampled_tokens = einops.rearrange(sampled_tokens, '(b l) -> b l', b=b)  # [B L]
-        return sampled_tokens.long()
-
     def forward(self, x: torch.Tensor, whose_move: torch.Tensor) -> dict[str, torch.Tensor]:
         student_mlm = self.student.mlm_forward(x, whose_move)
         teacher_mlm = self.teacher.mlm_forward(x, whose_move)
@@ -226,6 +222,7 @@ class ChessContrastiveBackbone(ChessBackbone):
         return {'mlm_loss': mlm_loss,
                 'discriminator_loss': discriminator_loss,
                 'clustering_loss': clustering_loss,
+                'contrastive_loss': contrastive_loss,
                 'loss': loss}
 
     def training_step(self, batch, batch_idx):
@@ -242,6 +239,7 @@ class ChessContrastiveBackbone(ChessBackbone):
         self.log("train_mlm_loss", loss['mlm_loss'], on_step=True, sync_dist=True)
         self.log("train_discriminator_loss", loss['discriminator_loss'], on_step=True, sync_dist=True)
         self.log("train_clustering_loss", loss['clustering_loss'], on_step=True, sync_dist=True)
+        self.log("train_contrastive_loss", loss['contrastive_loss'], on_step=True, sync_dist=True)
         self.log("loss", loss['loss'], prog_bar=True, on_step=True, sync_dist=True)
 
         return loss
@@ -253,6 +251,7 @@ class ChessContrastiveBackbone(ChessBackbone):
         self.log("val_mlm_loss", loss['mlm_loss'], sync_dist=True)
         self.log("val_discriminator_loss", loss['discriminator_loss'], sync_dist=True)
         self.log("val_clustering_loss", loss['clustering_loss'], sync_dist=True)
+        self.log("val_contrastive_loss", loss['contrastive_loss'], sync_dist=True)
         self.log("loss", loss['loss'], prog_bar=True, sync_dist=True)
 
         return loss

@@ -6,7 +6,7 @@ import comet_ml
 import torch
 from pytorch_lightning import Trainer, seed_everything
 
-from chess_gnn.data import BERTDataModule
+from chess_gnn.data import ChessDataModule
 from chess_gnn.trainer import TrainerFactory
 from chess_gnn.models import ChessELECTRA, ChessBERT
 
@@ -16,7 +16,7 @@ from chess_gnn.tasks.base import Task, get_config_path
 
 @HydraConfigurable
 class ELECTRATrain(Task):
-    def __init__(self, model: ChessELECTRA, datamodule: BERTDataModule, trainer_factory: TrainerFactory, bert_checkpoint: Optional[str] = None):
+    def __init__(self, model: ChessELECTRA, datamodule: ChessDataModule, trainer_factory: TrainerFactory, bert_checkpoint: Optional[str] = None):
         super().__init__()
         seed_everything(42)
         torch.set_float32_matmul_precision('medium')

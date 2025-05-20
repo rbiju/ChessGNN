@@ -3,10 +3,10 @@ from pathlib import Path
 from torch.utils.data import DataLoader
 from pytorch_lightning import LightningDataModule
 
-from .bert_data import HDF5ChessDataset
+from .h5_data import HDF5ChessDataset
 
 
-class BERTDataModule(LightningDataModule):
+class ChessDataModule(LightningDataModule):
     def __init__(self, data_directory: str, batch_size: int, mode: str, prefetch_factor: int = 4, num_workers: int = 12):
         super().__init__()
         self.data_directory = Path(data_directory)

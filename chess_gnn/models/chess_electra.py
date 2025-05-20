@@ -23,12 +23,10 @@ class ChessElectraEncoder(ChessEncoder):
         self.encoder = electra.discriminator
         self.dim = electra.dim
 
-        self.connector = electra.connector
-
-        self.cls_token = electra.bert.cls_token
-        self.whose_move = electra.bert.whose_move_embedding
-        self.embeddings = electra.bert.embedding_table
-        self.pos_emb = electra.bert.pos_emb
+        self.cls_token = electra.cls_token
+        self.whose_move = electra.whose_move_embedding
+        self.embeddings = electra.embedding_table
+        self.pos_emb = electra.pos_emb
 
     @staticmethod
     def squeeze_batch(batch):
@@ -40,7 +38,6 @@ class ChessElectraEncoder(ChessEncoder):
         x_ = torch.cat([cls_token, x_], dim=1)
         x_ = x_ + self.whose_move[whose_move].unsqueeze(1)
         x_ = x_ + self.pos_emb.unsqueeze(0)
-        x_ = self.connector(x_)
 
         out = self.encoder(x_, get_attn=get_attn)
 
@@ -83,7 +80,7 @@ class ChessDiscriminator(nn.Module):
 
             return {'cls': cls,
                     'tokens': x_[:, 1:, :],
-                    'attn_weights': attns}
+                    'attns': attns}
 
         else:
             for block in self.encoder:

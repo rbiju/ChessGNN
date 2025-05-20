@@ -1,10 +1,11 @@
-from chess_gnn.models import ChessBERT, ChessELECTRA, ChessXAttnEngine, ChessElectraEncoder, ChessContrastiveBackbone
+import torch
+from pytorch_lightning.utilities.model_summary import ModelSummary
+from torch.utils.data import DataLoader
+
 from chess_gnn.configuration import LocalHydraConfiguration
 from chess_gnn.data import HDF5ChessDataset
-
-import torch
-from torch.utils.data import DataLoader
-from pytorch_lightning.utilities.model_summary import ModelSummary
+from chess_gnn.models import ChessBERT, ChessELECTRA, ChessXAttnEngine, ChessElectraEncoder, ChessContrastiveBackbone
+from chess_gnn.models.chess_transformer import ChessTransformer
 
 
 def model_test():
@@ -114,5 +115,30 @@ def contrastive_dummy_forward():
     return out
 
 
+def transformer_dummy_forward():
+    cfg = LocalHydraConfiguration('/Users/ray/Projects/ChessGNN/configs/bert/training/transformer.yaml')
+    model = ChessTransformer.from_hydra_configuration(cfg)
+
+    ms = ModelSummary(model=model)
+    print(ms)
+
+    batch = {'board': torch.randint(low=0, high=13, size=(4, 64)),
+             'next_board': torch.randint(low=0, high=13, size=(4, 64)),
+             'whose_move': torch.randint(low=0, high=2, size=(4,))}
+
+    out = model(batch)
+    return out
+
+
+def test_data():
+    file = '/Users/ray/Datasets/chess/test_transformer/test/data.h5'
+    dataset = HDF5ChessDataset(str(file), 1024, mode='transformer')
+    dl = DataLoader(dataset, batch_size=1, num_workers=1, shuffle=True, persistent_workers=True, pin_memory=True)
+
+    batch = next(iter(dl))
+
+    return batch
+
+
 if __name__ == '__main__':
-    contrastive_dummy_forward()
+    transformer_dummy_forward()

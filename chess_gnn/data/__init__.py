@@ -1,2 +1,2 @@
-from .bert_data import HDF5ChessDataset
-from .bert_datamodule import BERTDataModule
+from .h5_data import HDF5ChessDataset
+from .datamodule import ChessDataModule

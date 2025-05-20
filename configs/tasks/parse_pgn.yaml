@@ -1,7 +1,7 @@
 ParsePGN:
   _target_: chess_gnn.tasks.ParsePGN
   parser:
-    _target_: chess_gnn.data_creation.BERTLichessDatasetCreator
+    _target_: chess_gnn.data_creation.TransformerDatasetCreator
     pgn_file: '/home/ray/datasets/chess/lumbras_2024.pgn'
     split:
       _target_: chess_gnn.data_creation.Split
@@ -9,5 +9,5 @@ ParsePGN:
       val: 0.05
       test: 0.05
   writer:
-    _target_: chess_gnn.data_creation.HDF5DatasetBuilder
+    _target_: chess_gnn.data_creation.TransformerHDF5DatasetBuilder
     chunk_size: 1024

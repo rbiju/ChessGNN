@@ -9,3 +9,7 @@ class SimpleChessTokenizer(ChessTokenizer):
 
     def tokenize(self, board_str: str) -> list[float]:
         return [self.inverse_vocab[token] for token in board_str]
+
+    def untokenize(self, tokens: list[int]) -> str:
+        board_str = [self.vocab[token] for token in tokens]
+        return ''.join(board_str)

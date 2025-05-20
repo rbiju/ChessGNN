@@ -6,7 +6,7 @@ import pytorch_lightning
 import torch
 from pytorch_lightning import Trainer, seed_everything
 
-from chess_gnn.data import BERTDataModule
+from chess_gnn.data import ChessDataModule
 from chess_gnn.trainer import TrainerFactory
 
 from chess_gnn.configuration import HydraConfigurable, LocalHydraConfiguration
@@ -15,7 +15,7 @@ from chess_gnn.tasks.base import Task, get_config_path
 
 @HydraConfigurable
 class BERTTrain(Task):
-    def __init__(self, model: pytorch_lightning.LightningModule, datamodule: BERTDataModule, trainer_factory: TrainerFactory):
+    def __init__(self, model: pytorch_lightning.LightningModule, datamodule: ChessDataModule, trainer_factory: TrainerFactory):
         super().__init__()
         seed_everything(42)
         torch.set_float32_matmul_precision('medium')

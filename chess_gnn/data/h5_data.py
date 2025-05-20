@@ -3,9 +3,11 @@ import h5py
 import torch
 
 DATA_MODES = {'ssl': ['board', 'whose_move'],
+              'transformer': ['board', 'next_board', 'whose_move'],
               'bert': ['board', 'whose_move', 'label'],
               'engine': ['board', 'label', 'from', 'to', 'whose_move'], }
 DTYPES = {'board': torch.long,
+          'next_board': torch.long,
           'whose_move': torch.long,
           'label': torch.float32,
           'from': torch.long,

@@ -24,7 +24,7 @@ EngineTrain:
       T_mult: 2
       warmup_steps: 1000
   datamodule:
-    _target_: chess_gnn.data.BERTDataModule
+    _target_: chess_gnn.data.ChessDataModule
     data_directory: '/home/ray/datasets/chess/lumbras_2024'
     batch_size: 512
     num_workers: 8

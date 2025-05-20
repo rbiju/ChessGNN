@@ -1,21 +1,22 @@
-BERTTrain:
-  _target_: chess_gnn.tasks.BERTTrain
+TransformerTrain:
+  _target_: chess_gnn.tasks.TransformerTrain
+  electra_checkpoint: '/home/ray/lightning_checkpoints/chess_electra/b58c6c50-a322-44b7-b4a7-95cca462ba26/last.ckpt'
   model:
-    _target_: chess_gnn.models.ChessBERT
-    num_layers: 8
-    block:
-      _target_: chess_gnn.bert.TransformerBlock
-      pos_emb_mode: "learned"
-      hidden: 256
-      attn_heads: 8
-      feed_forward_hidden: 512
-      norm_factory:
-        _target_: chess_gnn.bert.utils.LayerNormFactory
-    tokenizer:
-      _target_: chess_gnn.tokenizers.SimpleChessTokenizer
+    _target_: chess_gnn.models.ChessTransformer
+    _partial_: True
+    decoder:
+      _target_: torch.nn.TransformerDecoder
+      decoder_layer:
+        _target_: torch.nn.TransformerDecoderLayer
+        batch_first: True
+        d_model: 256
+        nhead: 8
+        dim_feedforward: 1024
+        dropout: 0.
+      num_layers: 6
     mask_handler:
-      _target_: chess_gnn.bert.BERTMaskHandler
-      mask_prob: 0.25
+      _target_: chess_gnn.bert.TransformerMaskHandler
+      masking_ratio: 0.40
     optimizer_factory:
       _target_: chess_gnn.optimizers.LambFactory
       learning_rate: 1e-3
@@ -25,25 +26,21 @@ BERTTrain:
       T_0: 10000
       T_mult: 2
       warmup_steps: 1000
-    loss_weights:
-      _target_: chess_gnn.models.BERTLossWeights
-      masking: 1.0
-      win_prediction: 1.0
   datamodule:
     _target_: chess_gnn.data.ChessDataModule
-    data_directory: '/home/ray/datasets/chess/lumbras_2024'
+    data_directory: '/home/ray/datasets/chess/lumbras_2024_transformer'
     batch_size: 1024
     num_workers: 8
-    mode: 'bert'
+    mode: 'transformer'
   trainer_factory:
     _target_: chess_gnn.trainer.TrainerFactory
-    log_every_n_steps: 250
+    log_every_n_steps: 100
     max_epochs: 1
     accelerator: 'auto'
     strategy: 'ddp'
     devices: 1
     precision: "bf16-mixed"
-    val_check_interval: 0.2
+    val_check_interval: 10_000
     num_sanity_val_steps: 1
     callbacks:
       - _target_: pytorch_lightning.callbacks.TQDMProgressBar
@@ -52,5 +49,4 @@ BERTTrain:
       - _target_: pytorch_lightning.callbacks.ModelCheckpoint
         _partial_: True
         save_last: True
-        save_on_train_epoch_end: True
-        every_n_train_steps: 10000
+        every_n_train_steps: 10_000

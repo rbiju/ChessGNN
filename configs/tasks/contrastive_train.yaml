@@ -1,5 +1,5 @@
 ContrastiveTrain:
-  _target_: chess_gnn.tasks.ELECTRATrain
+  _target_: chess_gnn.tasks.ContrastiveTrain
   model:
     _target_: chess_gnn.models.ChessContrastiveBackbone
     bert:
@@ -45,14 +45,14 @@ ContrastiveTrain:
           _target_: chess_gnn.bert.utils.LayerNormFactory
     student_mask_handler:
       _target_: chess_gnn.bert.ElectraMaskHandler
-      mask_prob: 0.45
+      mask_prob: 0.40
     teacher_mask_handler:
       _target_: chess_gnn.bert.ElectraMaskHandler
       mask_prob: 0.15
     clustering_head:
       _target_: chess_gnn.models.OnlineClustering
       in_dim: *dim
-      out_dim: 16
+      out_dim: 8192
       n_sk_iter: 3
       target_temp: 0.06
       pred_temp: 0.12
@@ -73,7 +73,7 @@ ContrastiveTrain:
       T_mult: 2
       warmup_steps: 1000
   datamodule:
-    _target_: chess_gnn.data.BERTDataModule
+    _target_: chess_gnn.data.ChessDataModule
     data_directory: '/home/ray/datasets/chess/lumbras_2024'
     batch_size: 1024
     num_workers: 8
@@ -83,7 +83,7 @@ ContrastiveTrain:
     log_every_n_steps: 100
     max_epochs: 1
     accelerator: 'auto'
-    strategy: 'ddp_find_unused_parameters_true'
+    strategy: 'ddp'
     devices: 1
     precision: "bf16-mixed"
     val_check_interval: 10_000

@@ -1,3 +1,4 @@
+import einops
 import torch
 import torch.nn as nn
 
@@ -101,3 +102,65 @@ class ElectraMaskHandler(nn.Module):
         labels[~masked_indices] = self.ignore_index
 
         return masked_input_ids, masked_indices, labels
+
+
+class TransformerMaskHandler(nn.Module):
+    def __init__(self, masking_ratio: float, mask_token_id: int = 13):
+        """
+        Args:
+            masking_ratio (float): Ratio of tokens to mask per sequence (0 < r < 1).
+            mask_token_id (int): Token ID to use for [MASK].
+        """
+        super().__init__()
+        self.masking_ratio = masking_ratio
+        self.mask_token_id = mask_token_id
+
+    @staticmethod
+    def get_noise(x: torch.Tensor):
+        B, L = x.shape
+        noise = torch.rand(B, L, device=x.device)
+
+        return noise
+
+    def get_mask(self, x: torch.Tensor):
+        B, L = x.shape
+        len_keep = int(L * (1 - self.masking_ratio))
+
+        noise = self.get_noise(x)
+
+        # sort noise for each sample
+        ids_shuffle = torch.argsort(noise, dim=-1)
+        ids_restore = torch.argsort(ids_shuffle, dim=-1)
+
+        return ids_shuffle, ids_restore, len_keep
+
+    def shuffle_and_mask(self, x: torch.Tensor, ids_shuffle: torch.Tensor, ids_restore: torch.Tensor, len_keep: int):
+        x_shuffled = torch.gather(x, dim=1, index=ids_shuffle)
+        x_shuffled[..., len_keep:] = self.mask_token_id
+        shuffled_with_mask = torch.gather(x_shuffled, dim=1, index=ids_restore)
+
+        return shuffled_with_mask
+
+    @staticmethod
+    def get_unmasked_tokens(x: torch.Tensor, ids_keep: torch.Tensor):
+        unmasked = torch.gather(x, dim=1, index=ids_keep)
+        return unmasked
+
+    @staticmethod
+    def get_masked_tokens(x: torch.Tensor, ids_mask: torch.Tensor):
+        masked = torch.gather(x, dim=1, index=ids_mask)
+        return masked
+
+    @staticmethod
+    def get_unmasked_embeddings(x: torch.Tensor, ids_keep: torch.Tensor):
+        _, _, E = x.shape
+        ids_keep = einops.repeat(ids_keep, 'b l -> b l e', e=E)
+
+        return torch.gather(x, dim=1, index=ids_keep)
+
+    @staticmethod
+    def get_masked_embeddings(x: torch.Tensor, ids_mask: torch.Tensor):
+        _, _, E = x.shape
+        ids_mask = einops.repeat(ids_mask, 'b l -> b l e', e=E)
+
+        return torch.gather(x, dim=1, index=ids_mask)

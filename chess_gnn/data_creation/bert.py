@@ -11,7 +11,7 @@ import multiprocessing
 
 from tqdm import tqdm
 
-from chess_gnn.utils import LichessChessBoardGetter
+from chess_gnn.utils import LichessChessBoardGetter, TransformerChessBoardGetter
 
 from .utils import Split
 
@@ -83,6 +83,21 @@ class BERTLichessDatasetCreator:
                 pass
 
         return [self.data_directory / split for split in asdict(self.split).keys()]
+
+
+class TransformerDatasetCreator(BERTLichessDatasetCreator):
+    def __init__(self, pgn_file: str,
+                 data_directory: str = None,
+                 split: Split = Split(),
+                 seed: int = 42, num_workers: int = None):
+        super().__init__(pgn_file, data_directory, split, seed, num_workers)
+        self.board_getter = TransformerChessBoardGetter(self.pgn_file)
+        self.data_directory = self.data_directory.with_name(self.data_directory.name + '_transformer')
+
+        os.makedirs(self.data_directory, exist_ok=True)
+        for split in asdict(self.split).keys():
+            for state in self.board_getter.result_mapping.values():
+                os.makedirs(self.data_directory / split / str(state), exist_ok=True)
 
 
 class BERTLichessDataAggregator:
