@@ -5,7 +5,7 @@ TransformerTrain:
     _target_: chess_gnn.models.ChessTransformer
     encoder:
       _target_: chess_gnn.models.ChessDiscriminator
-      num_layers: 8
+      num_layers: 10
       block:
         _target_: chess_gnn.bert.TransformerBlock
         pos_emb_mode: "learned"
@@ -28,7 +28,7 @@ TransformerTrain:
     mask_handler:
       _target_: chess_gnn.bert.TransformerMaskHandler
       masking_ratio: &masking_ratio
-        0.20
+        0.25
     optimizer_factory:
       _target_: chess_gnn.optimizers.LambFactory
       learning_rate: 1e-3
@@ -57,8 +57,9 @@ TransformerTrain:
     strategy: 'ddp'
     devices: 1
     precision: "bf16-mixed"
-    val_check_interval: 10_000
-    num_sanity_val_steps: 1
+    val_check_interval: 2000
+    limit_val_batches: 250
+    num_sanity_val_steps: 10
     callbacks:
       - _target_: pytorch_lightning.callbacks.TQDMProgressBar
       - _target_: pytorch_lightning.callbacks.LearningRateMonitor
