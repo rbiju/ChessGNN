@@ -19,7 +19,7 @@ EngineTrain:
       learning_rate: 5e-5
       weight_decay: 1e-6
     lr_scheduler_factory:
-      _target_: chess_gnn.lr_schedules.CosineAnnealingWarmupFactory
+      _target_: chess_gnn.schedules.CosineAnnealingWarmupFactory
       T_0: 10000
       T_mult: 2
       warmup_steps: 1000

@@ -68,7 +68,7 @@ class MultiHeadedAttention(nn.Module):
         self.output_linear = nn.Linear(d_model, d_model)
         self.attention = Attention()
 
-        self.dropout = nn.Dropout(p=dropout)
+        self.dropout_p = dropout
 
     def forward(self, query, key, value, get_attn: bool = False):
         batch_size = query.size(0)
@@ -82,7 +82,7 @@ class MultiHeadedAttention(nn.Module):
             return self.output_linear(x), attn
 
         # 2) Apply attention on all the projected vectors in batch.
-        x = nn.functional.scaled_dot_product_attention(q, k, v)
+        x = nn.functional.scaled_dot_product_attention(q, k, v, dropout_p=self.dropout_p)
 
         # 3) "Concat" using a view and apply a final linear.
         x = x.transpose(1, 2).contiguous().view(batch_size, -1, self.h * self.d_k)

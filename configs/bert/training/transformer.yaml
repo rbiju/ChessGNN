@@ -22,14 +22,14 @@ ChessTransformer:
       dropout: 0.
     num_layers: 6
   mask_handler:
-    _target_: chess_gnn.bert.TransformerMaskHandler
+    _target_: chess_gnn.bert.BlankSquareAwareTransformerMaskHandler
     masking_ratio: 0.25
   optimizer_factory:
     _target_: chess_gnn.optimizers.LambFactory
     learning_rate: 1e-3
     weight_decay: 1e-4
   lr_scheduler_factory:
-    _target_: chess_gnn.lr_schedules.CosineAnnealingWarmupFactory
+    _target_: chess_gnn.schedules.CosineAnnealingWarmupFactory
     T_0: 10000
     T_mult: 2
     warmup_steps: 1000

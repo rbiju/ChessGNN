@@ -14,8 +14,8 @@ class SublayerConnection(nn.Module):
 
     def forward(self, x, sublayer, get_attn: bool = False):
         if get_attn:
-            x, attn = sublayer(self.norm(x))
-            x = x + self.dropout(x)
+            x_, attn = sublayer(self.norm(x))
+            x = x + self.dropout(x_)
             return x, attn
         else:
             return x + self.dropout(sublayer(self.norm(x)))

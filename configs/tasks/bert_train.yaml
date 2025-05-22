@@ -21,14 +21,14 @@ BERTTrain:
       learning_rate: 1e-3
       weight_decay: 1e-4
     lr_scheduler_factory:
-      _target_: chess_gnn.lr_schedules.CosineAnnealingWarmupFactory
+      _target_: chess_gnn.schedules.CosineAnnealingWarmupFactory
       T_0: 10000
       T_mult: 2
       warmup_steps: 1000
     loss_weights:
       _target_: chess_gnn.models.BERTLossWeights
       masking: 1.0
-      win_prediction: 1.0
+      win_prediction: 0.
   datamodule:
     _target_: chess_gnn.data.ChessDataModule
     data_directory: '/home/ray/datasets/chess/lumbras_2024'

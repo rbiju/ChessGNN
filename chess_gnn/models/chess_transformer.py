@@ -1,14 +1,16 @@
 from dataclasses import dataclass
-from typing import Iterable
+from typing import Iterable, TypedDict, Optional
 
 import einops
 import torch
 import torch.nn as nn
+from torch.nn import TransformerEncoderLayer
+import torch.nn.functional as F
 from torch.nn import Parameter
 
 from chess_gnn.bert import TransformerMaskHandler
 from chess_gnn.configuration import HydraConfigurable
-from chess_gnn.lr_schedules.lr_schedules import LRSchedulerFactory
+from chess_gnn.schedules import LRSchedulerFactory, MaskingSchedule
 from chess_gnn.optimizers import OptimizerFactory
 from chess_gnn.tokenizers import ChessTokenizer, SimpleChessTokenizer
 from .base import ChessBackbone, ChessEncoder
@@ -26,17 +28,12 @@ class ChessTransformerEncoder(ChessEncoder):
         self.embeddings = transformer.embedding_table
         self.pos_emb = transformer.pos_embedding
 
-    @staticmethod
-    def squeeze_batch(batch):
-        return {key: batch[key].squeeze() for key in batch}
-
     def forward(self, x: torch.Tensor, whose_move: torch.Tensor, get_attn: bool = False) -> dict[str, torch.Tensor]:
         x_ = self.embeddings[x]
+        x_ = x_ + self.pos_emb.unsqueeze(0)
         cls_token = self.cls_token.unsqueeze(0).expand(x_.size(0), -1, -1)
         x_ = torch.cat([cls_token, x_], dim=1)
         x_ = x_ + self.whose_move[whose_move].unsqueeze(1)
-        x_ = x_ + self.pos_emb.unsqueeze(0)
-        x_ = self.connector(x_)
 
         out = self.encoder(x_, get_attn=get_attn)
 
@@ -56,6 +53,33 @@ class TransformerLossWeights:
             raise ValueError(f"Loss proportions must be positive: {self.current, self.next}")
 
 
+PieceWeights = TypedDict('PieceWeights', {
+    '.': float,
+    'B': float,
+    'K': float,
+    'N': float,
+    'P': float,
+    'Q': float,
+    'R': float,
+    'b': float,
+    'k': float,
+    'n': float,
+    'p': float,
+    'q': float,
+    'r': float
+})
+
+
+class SquareWeights:
+    def __init__(self, weight_dict: Optional[PieceWeights] = None):
+        if weight_dict is None:
+            weight_dict = {'.': 0.1, 'B': 1.0, 'K': 2.0, 'N': 1.0, 'P': 0.2, 'Q': 1.5, 'R': 1.0, 'b': 1.0,
+                           'k': 2.0, 'n': 1.0, 'p': 0.2, 'q': 1.5, 'r': 1.0}
+
+        self.weight_dict = weight_dict
+        self.weights = torch.Tensor([self.weight_dict[key] for key in sorted(self.weight_dict.keys())])
+
+
 @HydraConfigurable
 class ChessTransformer(ChessBackbone):
     def __init__(self, encoder: ChessDiscriminator,
@@ -63,8 +87,10 @@ class ChessTransformer(ChessBackbone):
                  mask_handler: TransformerMaskHandler,
                  optimizer_factory: OptimizerFactory,
                  lr_scheduler_factory: LRSchedulerFactory,
+                 masking_schedule: MaskingSchedule,
                  loss_weights: TransformerLossWeights = TransformerLossWeights(),
-                 tokenizer: ChessTokenizer = SimpleChessTokenizer()):
+                 tokenizer: ChessTokenizer = SimpleChessTokenizer(),
+                 square_weights: SquareWeights = SquareWeights()):
         super().__init__()
         self.dim = encoder.dim
         self.decoder_dim = decoder.layers[0].linear1.in_features
@@ -81,14 +107,25 @@ class ChessTransformer(ChessBackbone):
         self.connector = nn.Linear(self.dim, self.decoder_dim)
         self.mlm_head = nn.Linear(self.decoder_dim, tokenizer.vocab_size)
 
-        self.masking_loss = nn.CrossEntropyLoss()
+        self.masking_loss = nn.CrossEntropyLoss(weight=square_weights.weights)
         self.loss_weights = loss_weights
+        self.square_weights = square_weights
 
         self.optimizer_factory = optimizer_factory
         self.lr_scheduler_factory = lr_scheduler_factory
+        self.masking_schedule = masking_schedule
+
+        self.total_steps = None
 
         self.apply(self._init_weights)
         self.save_hyperparameters()
+
+    def initialize_weights(self):
+        torch.nn.init.trunc_normal_(self.cls_token, std=0.02)
+        torch.nn.init.trunc_normal_(self.embedding_table, std=0.02)
+        torch.nn.init.trunc_normal_(self.pos_embedding, std=0.02)
+        torch.nn.init.trunc_normal_(self.whose_move_embedding, std=0.02)
+        self.apply(self._init_weights)
 
     @staticmethod
     def _init_weights(module):
@@ -103,19 +140,24 @@ class ChessTransformer(ChessBackbone):
     def squeeze_batch(batch):
         return {key: batch[key].squeeze() for key in batch}
 
-    def encode(self, board: torch.Tensor, whose_move: torch.Tensor, ids_shuffle: torch.Tensor, ids_restore: torch.Tensor, len_keep: int):
+    def normalized_embedding(self):
+        return F.normalize(self.embedding_table, p=2, dim=-1)
+
+    def encode(self, board: torch.Tensor, whose_move: torch.Tensor, ids_shuffle: torch.Tensor,
+               ids_restore: torch.Tensor, len_keep: int):
         ids_keep = ids_shuffle[..., :len_keep]
         ids_mask = ids_shuffle[..., len_keep:]
 
         x_in = self.mask_handler.shuffle_and_mask(board, ids_shuffle, ids_restore, len_keep)
 
-        x_in = self.embedding_table[x_in] + self.pos_embedding.unsqueeze(0)
+        x_in = self.normalized_embedding()[x_in] + F.normalize(self.pos_embedding, p=2, dim=-1).unsqueeze(0)
 
         x_in = x_in + self.whose_move_embedding[whose_move].unsqueeze(1)
         decoder_in = self.mask_handler.get_masked_embeddings(x_in, ids_mask)
         encoder_in = self.mask_handler.get_unmasked_embeddings(x_in, ids_keep)
 
-        cls_token = self.cls_token.unsqueeze(0).expand(x_in.size(0), -1, -1) + self.whose_move_embedding[whose_move].unsqueeze(1)
+        cls_token = self.cls_token.unsqueeze(0).expand(x_in.size(0), -1, -1) + self.whose_move_embedding[
+            whose_move].unsqueeze(1)
         encoder_in = torch.cat([cls_token, encoder_in], dim=1)
         encoder_out = self.encoder(encoder_in)
 
@@ -140,7 +182,8 @@ class ChessTransformer(ChessBackbone):
         # mask is shared by current and next boards
         ids_shuffle, ids_restore, len_keep = self.mask_handler.get_mask(batch['board'])
         current_board_encoded = self.encode(batch['board'], batch['whose_move'], ids_shuffle, ids_restore, len_keep)
-        next_board_encoded = self.encode(batch['next_board'], torch.logical_not(batch['whose_move']).long(), ids_shuffle, ids_restore, len_keep)
+        next_board_encoded = self.encode(batch['next_board'], torch.logical_not(batch['whose_move']).long(),
+                                         ids_shuffle, ids_restore, len_keep)
 
         current_board_preds = self.decode(next_board_encoded['cls'], current_board_encoded['decoder_in'])
         next_board_preds = self.decode(current_board_encoded['cls'], next_board_encoded['decoder_in'])
@@ -153,9 +196,28 @@ class ChessTransformer(ChessBackbone):
 
         return {'current_board_loss': current_board_loss, 'next_board_loss': next_board_loss, 'loss': loss}
 
+    def visualize_forward(self, batch: dict[str, torch.Tensor]):
+        batch = self.squeeze_batch(batch)
+
+        # mask is shared by current and next boards
+        ids_shuffle, ids_restore, len_keep = self.mask_handler.get_mask(batch['board'])
+        current_board_encoded = self.encode(batch['board'], batch['whose_move'], ids_shuffle, ids_restore, len_keep)
+        next_board_encoded = self.encode(batch['next_board'], torch.logical_not(batch['whose_move']).long(),
+                                         ids_shuffle, ids_restore, len_keep)
+
+        current_board_preds = self.decode(next_board_encoded['cls'], current_board_encoded['decoder_in'])
+        next_board_preds = self.decode(current_board_encoded['cls'], next_board_encoded['decoder_in'])
+
+        return {'current_board_preds': current_board_preds, 'next_board_preds': next_board_preds, 'ids_shuffle': ids_shuffle, 'len_keep': len_keep}
+
     def training_step(self, batch, batch_idx):
+        step = self.global_step
+        new_ratio = self.masking_schedule(step)
+        self.mask_handler.set_masking_ratio(new_ratio)
+
         loss = self(batch)
 
+        self.log("masking_ratio", new_ratio, prog_bar=True, on_step=True)
         self.log("train_current_board_masking_loss", loss['current_board_loss'], on_step=True, sync_dist=True)
         self.log("train_next_board_loss", loss['next_board_loss'], on_step=True, sync_dist=True)
         self.log("loss", loss['loss'], prog_bar=True, on_step=True, sync_dist=True)

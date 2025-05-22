@@ -7,6 +7,7 @@ from einops import repeat
 import torch
 from torch.nn import Parameter
 import torch.nn as nn
+import torch.nn.functional as F
 from torchmetrics import Accuracy
 
 from typing import Iterable, Optional
@@ -14,7 +15,7 @@ from typing import Iterable, Optional
 from chess_gnn.bert import TransformerBlock, BERTMaskHandler, Mlp
 from chess_gnn.configuration import HydraConfigurable
 from chess_gnn.optimizers import OptimizerFactory
-from chess_gnn.lr_schedules.lr_schedules import LRSchedulerFactory
+from chess_gnn.schedules.lr_schedules import LRSchedulerFactory
 from chess_gnn.tokenizers import ChessTokenizer
 
 from .base import ChessBackbone, ChessEncoder
@@ -140,8 +141,11 @@ class ChessBERT(ChessBackbone):
     def squeeze_batch(batch):
         return {key: batch[key].squeeze() for key in batch}
 
+    def normalized_embedding(self):
+        return F.normalize(self.embedding_table, p=2, dim=-1)
+
     def forward(self, x: torch.Tensor, whose_move: torch.Tensor, get_attn: bool = False) -> dict[str, torch.Tensor]:
-        x_ = self.embedding_table[x]
+        x_ = self.normalized_embedding()[x]
         cls_token = repeat(self.cls_token, 'l e -> b l e', b=x.shape[0])
         x_ = torch.concat([cls_token, x_], dim=1)
         x_ = x_ + self.whose_move_embedding[whose_move].unsqueeze(1)

@@ -115,6 +115,9 @@ class TransformerMaskHandler(nn.Module):
         self.masking_ratio = masking_ratio
         self.mask_token_id = mask_token_id
 
+    def set_masking_ratio(self, ratio: float):
+        self.masking_ratio = ratio
+
     @staticmethod
     def get_noise(x: torch.Tensor):
         B, L = x.shape

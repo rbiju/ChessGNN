@@ -1,9 +1,20 @@
 TransformerTrain:
   _target_: chess_gnn.tasks.TransformerTrain
-  electra_checkpoint: '/home/ray/lightning_checkpoints/chess_electra/b58c6c50-a322-44b7-b4a7-95cca462ba26/last.ckpt'
+  compile_model: True
   model:
     _target_: chess_gnn.models.ChessTransformer
-    _partial_: True
+    encoder:
+      _target_: chess_gnn.models.ChessDiscriminator
+      num_layers: 8
+      block:
+        _target_: chess_gnn.bert.TransformerBlock
+        pos_emb_mode: "learned"
+        hidden: 512
+        attn_heads: 8
+        feed_forward_hidden: 2048
+        dropout: 0.
+        norm_factory:
+          _target_: chess_gnn.bert.utils.LayerNormFactory
     decoder:
       _target_: torch.nn.TransformerDecoder
       decoder_layer:
@@ -11,21 +22,27 @@ TransformerTrain:
         batch_first: True
         d_model: 256
         nhead: 8
-        dim_feedforward: 1024
+        dim_feedforward: 512
         dropout: 0.
-      num_layers: 6
+      num_layers: 4
     mask_handler:
       _target_: chess_gnn.bert.TransformerMaskHandler
-      masking_ratio: 0.40
+      masking_ratio: &masking_ratio
+        0.20
     optimizer_factory:
       _target_: chess_gnn.optimizers.LambFactory
       learning_rate: 1e-3
       weight_decay: 1e-4
     lr_scheduler_factory:
-      _target_: chess_gnn.lr_schedules.CosineAnnealingWarmupFactory
+      _target_: chess_gnn.schedules.CosineAnnealingWarmupFactory
       T_0: 10000
       T_mult: 2
       warmup_steps: 1000
+    masking_schedule:
+      _target_: chess_gnn.schedules.MaskingSchedule
+      start_ratio: 0.15
+      end_ratio: *masking_ratio
+      warmup_steps: 0
   datamodule:
     _target_: chess_gnn.data.ChessDataModule
     data_directory: '/home/ray/datasets/chess/lumbras_2024_transformer'
@@ -35,7 +52,7 @@ TransformerTrain:
   trainer_factory:
     _target_: chess_gnn.trainer.TrainerFactory
     log_every_n_steps: 100
-    max_epochs: 1
+    max_epochs: 2
     accelerator: 'auto'
     strategy: 'ddp'
     devices: 1
@@ -50,3 +67,4 @@ TransformerTrain:
         _partial_: True
         save_last: True
         every_n_train_steps: 10_000
+        save_on_train_epoch_end: True

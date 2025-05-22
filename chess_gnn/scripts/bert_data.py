@@ -132,7 +132,7 @@ def transformer_dummy_forward():
 
 def test_data():
     file = '/Users/ray/Datasets/chess/test_transformer/test/data.h5'
-    dataset = HDF5ChessDataset(str(file), 1024, mode='transformer')
+    dataset = HDF5ChessDataset(str(file), 4, mode='transformer')
     dl = DataLoader(dataset, batch_size=1, num_workers=1, shuffle=True, persistent_workers=True, pin_memory=True)
 
     batch = next(iter(dl))
@@ -140,5 +140,22 @@ def test_data():
     return batch
 
 
+def transformer_forward():
+    file = '/Users/ray/Datasets/chess/test_transformer/test/data.h5'
+    dataset = HDF5ChessDataset(str(file), 4, mode='transformer')
+    dl = DataLoader(dataset, batch_size=1, num_workers=1, shuffle=True, persistent_workers=True, pin_memory=True)
+
+    batch = next(iter(dl))
+
+    cfg = LocalHydraConfiguration('/Users/ray/Projects/ChessGNN/configs/bert/training/transformer.yaml')
+    model = ChessTransformer.from_hydra_configuration(cfg)
+
+    ms = ModelSummary(model=model)
+    print(ms)
+
+    out = model(batch)
+    return out
+
+
 if __name__ == '__main__':
-    transformer_dummy_forward()
+    transformer_forward()

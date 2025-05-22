@@ -8,7 +8,7 @@ import torch.nn as nn
 from chess_gnn.bert import Mlp
 from chess_gnn.configuration import HydraConfigurable
 from chess_gnn.optimizers import OptimizerFactory
-from chess_gnn.lr_schedules.lr_schedules import LRSchedulerFactory
+from chess_gnn.schedules.lr_schedules import LRSchedulerFactory
 
 from .base import ChessEncoder, ChessEngineEncoder, ChessEngine
 

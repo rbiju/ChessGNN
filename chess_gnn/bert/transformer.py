@@ -1,3 +1,5 @@
+import copy
+
 import torch.nn as nn
 
 from .attention import MultiHeadedAttention, MultiHeadedAttentionRoPE, RelativeMultiHeadAttention
@@ -26,14 +28,14 @@ class TransformerBlock(nn.Module):
         elif pos_emb_mode == "rope":
             self.attention = MultiHeadedAttentionRoPE(h=attn_heads, d_model=hidden)
         elif pos_emb_mode == "learned":
-            self.attention = MultiHeadedAttention(h=attn_heads, d_model=hidden)
+            self.attention = MultiHeadedAttention(h=attn_heads, d_model=hidden, dropout=dropout)
         else:
             raise NotImplementedError("Only 'relative', 'rope' or 'learned' are supported positional embedding modes")
 
         self.feed_forward = PositionwiseFeedForward(d_model=hidden, d_ff=feed_forward_hidden, dropout=dropout)
         norm = norm_factory.norm(hidden)
-        self.input_sublayer = SublayerConnection(dropout=dropout, norm=norm)
-        self.output_sublayer = SublayerConnection(dropout=dropout, norm=norm)
+        self.input_sublayer = SublayerConnection(dropout=dropout, norm=copy.deepcopy(norm))
+        self.output_sublayer = SublayerConnection(dropout=dropout, norm=copy.deepcopy(norm))
 
     def forward(self, x, get_attn: bool = False):
         if get_attn:

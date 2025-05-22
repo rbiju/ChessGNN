@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Optional, Generator
+from typing import Optional
 from pathlib import Path
 from uuid import uuid4
 
@@ -115,6 +115,17 @@ class PGNBoardHelper:
             board.push(move)
 
         return boards
+
+    def get_board_and_next_board_fens(self) -> tuple[list[str], list[str]]:
+        board = self.game.board()
+        boards = []
+        next_boards = []
+        for move in self.game.mainline_moves():
+            boards.append(board.fen())
+            board.push(move)
+            next_boards.append(board.fen())
+
+        return boards, next_boards
 
     def result(self) -> int:
         return self.result_mapping[self.game.headers['Result']]
