@@ -1,5 +1,5 @@
 AggregateData:
   _target_: chess_gnn.tasks.AggregateData
-  data_directory: '/home/ray/datasets/chess/lichess_db_standard_rated_2013-08'
+  data_directory: '/home/ray/datasets/chess/lumbras_2024_with_draws_transformer'
   batch_size: 750
-  include_draw: False
+  include_draw: True

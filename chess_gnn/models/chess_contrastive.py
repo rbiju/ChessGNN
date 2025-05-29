@@ -22,12 +22,16 @@ class ChessContrastiveEncoder(ChessEncoder):
     def __init__(self, backbone: "ChessContrastiveBackbone"):
         super().__init__()
         self.encoder = backbone.teacher.discriminator
-        self.dim = backbone.dim
+        self._dim = backbone.dim
 
         self.cls_token = backbone.cls_token
         self.embeddings = backbone.embedding_table
         self.whose_move_embedding = backbone.whose_move_embedding
         self.pos_embedding = backbone.pos_embedding
+
+    @property
+    def dim(self):
+        return self._dim
 
     def forward(self, x: torch.Tensor, whose_move: torch.Tensor, get_attn: bool = False) -> dict[str, torch.Tensor]:
         x_ = self.embeddings[x]

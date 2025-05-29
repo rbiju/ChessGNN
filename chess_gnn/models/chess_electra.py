@@ -21,16 +21,16 @@ class ChessElectraEncoder(ChessEncoder):
     def __init__(self, electra: "ChessELECTRA"):
         super().__init__()
         self.encoder = electra.discriminator
-        self.dim = electra.dim
+        self._dim = electra.dim
 
         self.cls_token = electra.cls_token
         self.whose_move = electra.whose_move_embedding
         self.embeddings = electra.embedding_table
         self.pos_emb = electra.pos_emb
 
-    @staticmethod
-    def squeeze_batch(batch):
-        return {key: batch[key].squeeze() for key in batch}
+    @property
+    def dim(self):
+        return self._dim
 
     def forward(self, x: torch.Tensor, whose_move: torch.Tensor, get_attn: bool = False) -> dict[str, torch.Tensor]:
         x_ = self.embeddings[x]

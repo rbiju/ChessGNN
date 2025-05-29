@@ -1,6 +1,7 @@
 import multiprocessing
 from multiprocessing import Pool
 from pathlib import Path
+from typing import Optional
 
 import h5py
 import numpy as np
@@ -11,11 +12,12 @@ from chess_gnn.tokenizers import ChessTokenizer, SimpleChessTokenizer
 
 class HDF5DatasetBuilder:
     def __init__(self, chunk_size: int, tokenizer: ChessTokenizer = SimpleChessTokenizer(), max_len: int = 64,
-                 num_workers: int = None):
+                 num_workers: int = None, file_name: Optional[str] = None):
         self.chunk_size = chunk_size
         self.tokenizer = tokenizer
         self.max_len = max_len
         self.num_workers = num_workers or multiprocessing.cpu_count()
+        self.file_name = file_name if file_name is not None else 'data'
 
     def _process_line(self, line: str):
         line = line.strip()
@@ -31,7 +33,7 @@ class HDF5DatasetBuilder:
 
     def write_dataset(self, input_file: str):
         input_file = Path(input_file)
-        output_path = input_file.parent / "data.h5"
+        output_path = input_file.parent / f"{self.file_name}.h5"
 
         if output_path.exists():
             output_path.unlink()
@@ -85,8 +87,8 @@ class HDF5DatasetBuilder:
 
 class TransformerHDF5DatasetBuilder(HDF5DatasetBuilder):
     def __init__(self, chunk_size: int, tokenizer: ChessTokenizer = SimpleChessTokenizer(), max_len: int = 64,
-                 num_workers: int = None):
-        super().__init__(chunk_size, tokenizer, max_len, num_workers)
+                 num_workers: int = None, file_name: Optional[str] = None):
+        super().__init__(chunk_size, tokenizer, max_len, num_workers, file_name)
 
     def _process_line(self, line: str):
         line = line.strip()
@@ -103,7 +105,7 @@ class TransformerHDF5DatasetBuilder(HDF5DatasetBuilder):
 
     def write_dataset(self, input_file: str):
         input_file = Path(input_file)
-        output_path = input_file.parent / "data.h5"
+        output_path = input_file.parent / f"{self.file_name}.h5"
 
         if output_path.exists():
             output_path.unlink()

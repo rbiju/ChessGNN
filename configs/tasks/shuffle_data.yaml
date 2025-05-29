@@ -2,4 +2,4 @@ ShuffleData:
   _target_: chess_gnn.tasks.ShuffleData
   shuffler:
     _target_: chess_gnn.data_creation.BERTLichessDataShuffler
-    input_file: '/home/ray/datasets/chess/lichess_db_standard_rated_2017-02/test/aggregated_data.txt'
+    input_file: '/home/ray/datasets/chess/lumbras_2024_with_draws_transformer/train/aggregated_data_with_draws.txt'

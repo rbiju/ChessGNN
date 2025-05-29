@@ -8,6 +8,11 @@ class ChessEncoder(nn.Module, ABC):
     def __init__(self):
         super().__init__()
 
+    @property
+    @abstractmethod
+    def dim(self):
+        raise NotImplementedError
+
     @abstractmethod
     def forward(self, x: torch.Tensor, whose_move: torch.Tensor, get_attn: bool = False) -> dict[str, torch.Tensor]:
         raise NotImplementedError

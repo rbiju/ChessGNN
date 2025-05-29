@@ -1,19 +1,19 @@
 EngineTrain:
   _target_: chess_gnn.tasks.EngineTrain
   checkpoint_loader:
-    _target_: chess_gnn.loaders.BERTCheckpointLoader
-    ckpt_path: "/home/ray/lightning_checkpoints/chess_bert/7b961c05-55bf-45a0-8090-1409a883d676/final.ckpt"
+    _target_: chess_gnn.loaders.TransformerCheckpointLoader
+    ckpt_path: "/home/ray/lightning_checkpoints/chess_transformer/d3123096-a5c1-4ab7-978a-e3bcbefdcecd/last.ckpt"
   model:
     _target_: chess_gnn.models.ChessXAttnEngine
     _partial_: True
     decoder_layer:
       _target_: torch.nn.TransformerDecoderLayer
-      d_model: 384
+      d_model: 512
       nhead: 4
-      dim_feedforward: 768
+      dim_feedforward: 1024
       dropout: 0.0
       batch_first: True
-    n_decoder_layers: 4
+    n_decoder_layers: 2
     optimizer_factory:
       _target_: chess_gnn.optimizers.LambFactory
       learning_rate: 5e-5
@@ -22,23 +22,25 @@ EngineTrain:
       _target_: chess_gnn.schedules.CosineAnnealingWarmupFactory
       T_0: 10000
       T_mult: 2
-      warmup_steps: 1000
+      warmup_steps: 2500
+      start_factor: 1e-8
   datamodule:
     _target_: chess_gnn.data.ChessDataModule
-    data_directory: '/home/ray/datasets/chess/lumbras_2024'
-    batch_size: 512
+    data_directory: '/home/ray/datasets/chess/lumbras_2024_with_draws_transformer'
+    batch_size: 1024
     num_workers: 8
     mode: 'engine'
   trainer_factory:
     _target_: chess_gnn.trainer.TrainerFactory
     log_every_n_steps: 100
-    max_epochs: 1
+    max_epochs: 2
     accelerator: 'auto'
-    strategy: 'ddp_find_unused_parameters_true'
+    strategy: 'ddp'
     devices: 1
     precision: "bf16-mixed"
-    val_check_interval: 10_000
-    num_sanity_val_steps: 1
+    val_check_interval: 2000
+    limit_val_batches: 250
+    num_sanity_val_steps: 10
     callbacks:
       - _target_: pytorch_lightning.callbacks.TQDMProgressBar
       - _target_: pytorch_lightning.callbacks.LearningRateMonitor
@@ -46,4 +48,5 @@ EngineTrain:
       - _target_: pytorch_lightning.callbacks.ModelCheckpoint
         _partial_: True
         save_last: True
-        every_n_train_steps: 2500
+        every_n_train_steps: 10_000
+        save_on_train_epoch_end: True

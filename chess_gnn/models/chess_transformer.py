@@ -20,19 +20,26 @@ class ChessTransformerEncoder(ChessEncoder):
     def __init__(self, transformer: "ChessTransformer"):
         super().__init__()
         self.encoder = transformer.encoder
-        self.dim = transformer.dim
 
         self.cls_token = transformer.current_board_cls_token
         self.whose_move = transformer.whose_move_embedding
         self.embeddings = transformer.embedding_table
         self.pos_emb = transformer.pos_embedding
 
+    @property
+    def dim(self):
+        return self.encoder.dim
+
+    @staticmethod
+    def norm(embedding):
+        return F.normalize(embedding, p=2, dim=-1)
+
     def forward(self, x: torch.Tensor, whose_move: torch.Tensor, get_attn: bool = False) -> dict[str, torch.Tensor]:
-        x_ = self.embeddings[x]
-        x_ = x_ + self.pos_emb.unsqueeze(0)
-        cls_token = self.cls_token.unsqueeze(0).expand(x_.size(0), -1, -1)
+        x_ = self.norm(self.embeddings[x])
+        x_ = x_ + self.norm(self.pos_emb).unsqueeze(0)
+        cls_token = self.norm(self.cls_token).unsqueeze(0).expand(x_.size(0), -1, -1)
         x_ = torch.cat([cls_token, x_], dim=1)
-        x_ = x_ + self.whose_move[whose_move].unsqueeze(1)
+        x_ = x_ + self.norm(self.whose_move)[whose_move].unsqueeze(1)
 
         out = self.encoder(x_, get_attn=get_attn)
 

@@ -26,13 +26,17 @@ class ChessBERTEncoder(ChessEncoder):
         super().__init__()
         self.encoder = bert.encoder
         self.norm = bert.norm
-        self.dim = bert.dim
+        self._dim = bert.dim
 
         self.cls_token = bert.cls_token
         self.whose_move_embedding = bert.whose_move_embedding
         self.embedding_table = bert.embedding_table
 
         self.pos_emb = bert.pos_emb
+
+    @property
+    def dim(self):
+        return self._dim
 
     def forward(self, x: torch.Tensor, whose_move: torch.Tensor, get_attn: bool = False) -> dict[str, torch.Tensor]:
         x_ = self.embedding_table[x]

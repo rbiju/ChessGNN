@@ -1,6 +1,6 @@
 import copy
 from dataclasses import dataclass
-from typing import Iterable
+from typing import Iterator
 
 import torch
 import torch.nn as nn
@@ -20,6 +20,10 @@ class ChessXAttnEncoder(ChessEngineEncoder):
         self.from_head = engine.from_head
         self.to_head = engine.to_head
         self.win_prediction_head = engine.win_prediction_head
+
+    @property
+    def dim(self):
+        return self.encoder.dim
 
     def forward(self, x: torch.Tensor, whose_move: torch.Tensor, get_attn: bool = False) -> dict[str, torch.Tensor]:
         out = self.encoder(x, whose_move, get_attn)
@@ -77,15 +81,15 @@ class ChessXAttnEngine(ChessEngine):
         super().__init__()
         self.encoder = encoder
         self.dim = encoder.dim
+
         self.from_head = MovePredictionXAttnHead(in_dim=self.dim, decoder_layer=copy.deepcopy(decoder_layer),
                                                  num_layers=n_decoder_layers)
         self.to_head = MovePredictionXAttnHead(in_dim=self.dim, decoder_layer=copy.deepcopy(decoder_layer),
                                                num_layers=n_decoder_layers)
-        self.win_prediction_head = Mlp(in_dim=self.dim, out_dim=1, dropout=0.1,
+        self.win_prediction_head = Mlp(in_dim=self.dim, out_dim=2, dropout=0.1,
                                        hidden_dim=self.dim)
 
-        self.move_loss = nn.CrossEntropyLoss()
-        self.win_prediction_loss = nn.BCEWithLogitsLoss()
+        self.loss_fn = nn.CrossEntropyLoss()
 
         self.optimizer_factory = optimizer_factory
         self.lr_scheduler_factory = lr_scheduler_factory
@@ -100,6 +104,19 @@ class ChessXAttnEngine(ChessEngine):
     @staticmethod
     def squeeze_batch(batch):
         return {key: batch[key].squeeze() for key in batch}
+
+    @staticmethod
+    def convert_labels_to_probs(labels: torch.LongTensor) -> torch.Tensor:
+        probs = torch.zeros((labels.size(0), 2), dtype=torch.float32, device=labels.device)
+        mask_0 = labels == 0
+        mask_1 = labels == 1
+        mask_2 = labels == 2
+
+        probs[mask_0, 0] = 1.0
+        probs[mask_1, 1] = 1.0
+        probs[mask_2] = 0.5
+
+        return probs
 
     def forward(self, x: torch.Tensor, whose_move: torch.Tensor) -> dict[str, torch.Tensor]:
         out = self.encoder(x, whose_move)
@@ -119,10 +136,10 @@ class ChessXAttnEngine(ChessEngine):
 
         out = self(batch['board'], batch['whose_move'])
 
-        from_loss = self.move_loss(out['from'], batch['from'])
-        to_loss = self.move_loss(out['to'], batch['to'])
+        from_loss = self.loss_fn(out['from'], batch['from'])
+        to_loss = self.loss_fn(out['to'], batch['to'])
 
-        win_prediction_loss = self.win_prediction_loss(out['win_probability'], batch['label'])
+        win_prediction_loss = self.loss_fn(out['win_probability'], self.convert_labels_to_probs(batch['label']))
 
         loss = (self.loss_weights.from_loss * from_loss +
                 self.loss_weights.to_loss * to_loss +
@@ -162,13 +179,13 @@ class ChessXAttnEngine(ChessEngine):
         return out
 
     @staticmethod
-    def configure_optimizer_from_params(params: Iterable[tuple[str, nn.Parameter]],
+    def configure_optimizer_from_params(params: Iterator[nn.Parameter],
                                         optimizer_factory: OptimizerFactory,
                                         scheduler_factory: LRSchedulerFactory):
         if optimizer_factory is None or scheduler_factory is None:
             raise RuntimeError('Optimizer and scheduler must be set for training')
 
-        optimizer = optimizer_factory.optimizer(params=params)
+        optimizer = optimizer_factory.optimizer(filter(lambda p: p.requires_grad, params))
         scheduler = scheduler_factory.scheduler(optimizer=optimizer)
 
         optimizer_config = {"optimizer": optimizer}
@@ -177,6 +194,6 @@ class ChessXAttnEngine(ChessEngine):
         return optimizer_config
 
     def configure_optimizers(self):
-        return self.configure_optimizer_from_params(self.named_parameters(),
+        return self.configure_optimizer_from_params(self.parameters(),
                                                     self.optimizer_factory,
                                                     self.lr_scheduler_factory)

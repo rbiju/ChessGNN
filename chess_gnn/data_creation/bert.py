@@ -30,7 +30,8 @@ class BERTLichessDatasetCreator:
         self.split = split
         self.num_workers = multiprocessing.cpu_count() if num_workers is None else num_workers
 
-        os.makedirs(data_directory, exist_ok=True)
+    def make_dirs(self):
+        os.makedirs(str(self.data_directory), exist_ok=True)
         for split in asdict(self.split).keys():
             for state in self.board_getter.result_mapping.values():
                 os.makedirs(self.data_directory / split / str(state), exist_ok=True)
@@ -76,6 +77,7 @@ class BERTLichessDatasetCreator:
             self._write_game(*parsed, split=split)
 
     def create_dataset(self):
+        self.make_dirs()
         offsets = self._get_game_offsets()
         with multiprocessing.Pool(processes=self.num_workers) as pool:
             for _ in tqdm(pool.imap_unordered(self._process_offset, offsets), total=len(offsets),
@@ -93,11 +95,6 @@ class TransformerDatasetCreator(BERTLichessDatasetCreator):
         super().__init__(pgn_file, data_directory, split, seed, num_workers)
         self.board_getter = TransformerChessBoardGetter(self.pgn_file)
         self.data_directory = self.data_directory.with_name(self.data_directory.name + '_transformer')
-
-        os.makedirs(self.data_directory, exist_ok=True)
-        for split in asdict(self.split).keys():
-            for state in self.board_getter.result_mapping.values():
-                os.makedirs(self.data_directory / split / str(state), exist_ok=True)
 
 
 class BERTLichessDataAggregator:

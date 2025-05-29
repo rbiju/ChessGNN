@@ -1,8 +1,10 @@
 ParsePGN:
   _target_: chess_gnn.tasks.ParsePGN
+  include_draw: True
   parser:
     _target_: chess_gnn.data_creation.TransformerDatasetCreator
     pgn_file: '/home/ray/datasets/chess/lumbras_2024.pgn'
+    data_directory: '/home/ray/datasets/chess/lumbras_2024_with_draws'
     split:
       _target_: chess_gnn.data_creation.Split
       train: 0.9

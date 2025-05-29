@@ -8,7 +8,7 @@ from pytorch_lightning import Trainer, seed_everything
 
 from chess_gnn.data import ChessDataModule
 from chess_gnn.trainer import TrainerFactory
-from chess_gnn.models import ChessBackbone, ChessXAttnEngine
+from chess_gnn.models import ChessXAttnEngine
 
 from chess_gnn.configuration import HydraConfigurable, LocalHydraConfiguration
 from chess_gnn.loaders import CheckpointLoader

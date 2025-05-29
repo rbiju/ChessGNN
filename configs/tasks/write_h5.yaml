@@ -1,6 +1,6 @@
 WriteH5:
   _target_: chess_gnn.tasks.WriteH5
-  data_directory: '/home/ray/datasets/chess/lumbras_2024_transformer'
+  data_directory: '/home/ray/datasets/chess/lumbras_2024_with_draws_transformer'
   writer:
     _target_: chess_gnn.data_creation.TransformerHDF5DatasetBuilder
     chunk_size: 1024
