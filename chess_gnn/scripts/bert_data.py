@@ -4,7 +4,7 @@ from torch.utils.data import DataLoader
 
 from chess_gnn.configuration import LocalHydraConfiguration
 from chess_gnn.data import HDF5ChessDataset
-from chess_gnn.models import ChessBERT, ChessELECTRA, ChessXAttnEngine, ChessElectraEncoder, ChessContrastiveBackbone
+from chess_gnn.models import ChessBERT, ChessELECTRA, ChessXAttnEngine, ChessElectraEncoder, ChessContrastiveBackbone, ChessMLPEngine
 from chess_gnn.models.chess_transformer import ChessTransformer
 
 
@@ -157,5 +157,31 @@ def transformer_forward():
     return out
 
 
+def mlp_engine_dummy_forward():
+    ckpt = torch.load('/Users/ray/models/chess/transformer/0eb35bb7-5c81-4f8f-829a-f00cd1686ac7/last.ckpt',
+                      map_location="cpu")
+    model = ChessTransformer(**ckpt['hyper_parameters'])
+    model.load_state_dict(ckpt['state_dict'])
+
+    encoder = model.get_encoder()
+
+    cfg = LocalHydraConfiguration('/Users/ray/Projects/ChessGNN/configs/bert/training/mlp_engine.yaml')
+    model = ChessMLPEngine.from_hydra_configuration(cfg)
+    model = model(encoder)
+
+    ms = ModelSummary(model=model)
+    print(ms)
+
+    batch = {'board': torch.randint(low=0, high=13, size=(4, 64)),
+             'label': torch.randint(low=0, high=3, size=(4,)).float(),
+             'from': torch.randint(low=0, high=64, size=(4,)),
+             'to': torch.randint(low=0, high=64, size=(4,)),
+             'whose_move': torch.randint(low=0, high=2, size=(4,))}
+
+    out = model.calculate_loss(batch)
+
+    return out
+
+
 if __name__ == '__main__':
-    transformer_forward()
+    mlp_engine_dummy_forward()

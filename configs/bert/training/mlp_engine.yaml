@@ -1,0 +1,32 @@
+ChessMLPEngine:
+  _target_: chess_gnn.models.ChessMLPEngine
+  _partial_: True
+  move_prediction_head:
+    _target_: chess_gnn.models.MLPHead
+    in_dim: 512
+    hidden_dim:
+      - 2048
+      - 2048
+      - 2048
+    out_dim: 2
+    activation: 'gelu'
+    skip: True
+  win_prediction_head:
+    _target_: chess_gnn.models.MLPHead
+    in_dim: 512
+    hidden_dim:
+      - 2048
+      - 2048
+      - 2048
+    out_dim: 2
+    activation: 'gelu'
+    skip: True
+  optimizer_factory:
+    _target_: chess_gnn.optimizers.LambFactory
+    learning_rate: 1e-4
+    weight_decay: 1e-4
+  lr_scheduler_factory:
+    _target_: chess_gnn.schedules.CosineAnnealingWarmupFactory
+    T_0: 10000
+    T_mult: 2
+    warmup_steps: 1000

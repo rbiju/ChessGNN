@@ -1,0 +1,62 @@
+MLPEngineTrain:
+  _target_: chess_gnn.tasks.MLPEngineTrain
+  checkpoint_loader:
+    _target_: chess_gnn.loaders.TransformerCheckpointLoader
+    ckpt_path: "/home/ray/lightning_checkpoints/chess_transformer/0eb35bb7-5c81-4f8f-829a-f00cd1686ac7/last.ckpt"
+  model:
+    _target_: chess_gnn.models.ChessMLPEngine
+    _partial_: True
+    move_prediction_head:
+      _target_: chess_gnn.models.MLPHead
+      in_dim: 512
+      hidden_dim:
+        - 2048
+        - 2048
+      out_dim: 2
+      activation: 'gelu'
+      skip: True
+    win_prediction_head:
+      _target_: chess_gnn.models.MLPHead
+      in_dim: 512
+      hidden_dim:
+        - 2048
+        - 2048
+        - 2048
+      out_dim: 2
+      activation: 'gelu'
+      skip: True
+    optimizer_factory:
+      _target_: chess_gnn.optimizers.LambFactory
+      learning_rate: 5e-5
+      weight_decay: 1e-5
+    lr_scheduler_factory:
+      _target_: chess_gnn.schedules.CosineAnnealingWarmupFactory
+      T_0: 10000
+      T_mult: 5
+      warmup_steps: 1000
+  datamodule:
+    _target_: chess_gnn.data.ChessDataModule
+    data_directory: '/home/ray/datasets/chess/lumbras_2024_with_draws_transformer'
+    batch_size: 1024
+    num_workers: 8
+    mode: 'engine'
+  trainer_factory:
+    _target_: chess_gnn.trainer.TrainerFactory
+    log_every_n_steps: 100
+    max_epochs: 2
+    accelerator: 'auto'
+    strategy: 'ddp'
+    devices: 1
+    precision: "bf16-mixed"
+    val_check_interval: 2000
+    limit_val_batches: 250
+    num_sanity_val_steps: 10
+    callbacks:
+      - _target_: pytorch_lightning.callbacks.TQDMProgressBar
+      - _target_: pytorch_lightning.callbacks.LearningRateMonitor
+        logging_interval: 'step'
+      - _target_: pytorch_lightning.callbacks.ModelCheckpoint
+        _partial_: True
+        save_last: True
+        every_n_train_steps: 10_000
+        save_on_train_epoch_end: True

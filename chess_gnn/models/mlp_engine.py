@@ -1,24 +1,21 @@
-import copy
-from dataclasses import dataclass
 from typing import Iterator
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
-from chess_gnn.bert import Mlp
 from chess_gnn.configuration import HydraConfigurable
 from chess_gnn.optimizers import OptimizerFactory
 from chess_gnn.schedules.lr_schedules import LRSchedulerFactory
 
-from .base import ChessEncoder, ChessEngineEncoder, ChessEngine
+from .base import ChessEncoder, ChessEngineEncoder, ChessEngine, EngineLossWeights, MLPHead
 
 
-class ChessXAttnEncoder(ChessEngineEncoder):
-    def __init__(self, engine: "ChessXAttnEngine"):
+class ChessMLPEngineEncoder(ChessEngineEncoder):
+    def __init__(self, engine: "ChessMLPEngine"):
         super().__init__()
         self.encoder = engine.encoder
-        self.from_head = engine.from_head
-        self.to_head = engine.to_head
+        self.move_prediction_head = engine.move_prediction_head
         self.win_prediction_head = engine.win_prediction_head
 
     @property
@@ -26,55 +23,23 @@ class ChessXAttnEncoder(ChessEngineEncoder):
         return self.encoder.dim
 
     def forward(self, x: torch.Tensor, whose_move: torch.Tensor, get_attn: bool = False) -> dict[str, torch.Tensor]:
-        out = self.encoder(x, whose_move, get_attn)
-        from_prediction = self.from_head(out['cls'].unsqueeze(1), out['tokens'])
-        to_prediction = self.to_head(out['cls'].unsqueeze(1), out['tokens'])
+        out = self.encoder(x, whose_move)
+        move_predictions = self.move_prediction_head(out['tokens'])
         win_prediction = self.win_prediction_head(out['cls'])
 
-        return {**out,
-                'from': from_prediction.squeeze(),
-                'to': to_prediction.squeeze(),
-                'win_probability': win_prediction.squeeze()}
-
-
-@dataclass
-class EngineLossWeights:
-    from_loss: float = 1.0
-    to_loss: float = 1.0
-    win_prediction_loss: float = 1.0
-
-    def __post_init__(self):
-        self.validate()
-
-    def validate(self):
-        if self.from_loss < 0 or self.to_loss < 0 or self.win_prediction_loss < 0:
-            raise ValueError(
-                f"Loss proportions must be positive: {self.from_loss, self.to_loss, self.win_prediction_loss}.")
-
-
-class MovePredictionXAttnHead(nn.Module):
-    def __init__(self, in_dim: int, decoder_layer: nn.TransformerDecoderLayer, num_layers: int, out_dim: int = 64):
-        super().__init__()
-        self.linear_in = nn.Linear(in_dim, decoder_layer.linear1.in_features)
-        self.decoder = nn.TransformerDecoder(decoder_layer=decoder_layer, num_layers=num_layers)
-        self.linear_out = nn.Linear(decoder_layer.linear1.in_features, out_dim)
-
-    def forward(self, x: torch.Tensor, other: torch.Tensor) -> torch.Tensor:
-        x_ = self.linear_in(x)
-        other_ = self.linear_in(other)
-
-        x_ = self.decoder(x_, other_)
-        x_ = self.linear_out(x_)
-
-        return x_
+        return {'cls': out['cls'],
+                'tokens': out['tokens'],
+                'from': F.softmax(move_predictions.squeeze()[..., 0], dim=-1),
+                'to': F.softmax(move_predictions.squeeze()[..., 1], dim=-1),
+                'win_probability': F.softmax(win_prediction.squeeze(), dim=-1)}
 
 
 @HydraConfigurable
-class ChessXAttnEngine(ChessEngine):
+class ChessMLPEngine(ChessEngine):
     def __init__(self,
                  encoder: ChessEncoder,
-                 decoder_layer: nn.TransformerDecoderLayer,
-                 n_decoder_layers: int,
+                 move_prediction_head: MLPHead,
+                 win_prediction_head: MLPHead,
                  optimizer_factory: OptimizerFactory,
                  lr_scheduler_factory: LRSchedulerFactory,
                  loss_weights: EngineLossWeights = EngineLossWeights(), ):
@@ -82,12 +47,8 @@ class ChessXAttnEngine(ChessEngine):
         self.encoder = encoder
         self.dim = encoder.dim
 
-        self.from_head = MovePredictionXAttnHead(in_dim=self.dim, decoder_layer=copy.deepcopy(decoder_layer),
-                                                 num_layers=n_decoder_layers)
-        self.to_head = MovePredictionXAttnHead(in_dim=self.dim, decoder_layer=copy.deepcopy(decoder_layer),
-                                               num_layers=n_decoder_layers)
-        self.win_prediction_head = Mlp(in_dim=self.dim, out_dim=2, dropout=0.1,
-                                       hidden_dim=self.dim)
+        self.move_prediction_head = move_prediction_head
+        self.win_prediction_head = win_prediction_head
 
         self.loss_fn = nn.CrossEntropyLoss()
 
@@ -99,7 +60,7 @@ class ChessXAttnEngine(ChessEngine):
         self.save_hyperparameters()
 
     def get_encoder(self) -> ChessEncoder:
-        return ChessXAttnEncoder(self)
+        return ChessMLPEngineEncoder(self)
 
     @staticmethod
     def squeeze_batch(batch):
@@ -121,14 +82,13 @@ class ChessXAttnEngine(ChessEngine):
     def forward(self, x: torch.Tensor, whose_move: torch.Tensor) -> dict[str, torch.Tensor]:
         out = self.encoder(x, whose_move)
 
-        from_prediction = self.from_head(out['cls'].unsqueeze(1), out['tokens'])
-        to_prediction = self.to_head(out['cls'].unsqueeze(1), out['tokens'])
+        move_predictions = self.move_prediction_head(out['tokens'])
         win_prediction = self.win_prediction_head(out['cls'])
 
         return {'cls': out['cls'],
                 'tokens': out['tokens'],
-                'from': from_prediction.squeeze(),
-                'to': to_prediction.squeeze(),
+                'from': move_predictions.squeeze()[..., 0],
+                'to': move_predictions.squeeze()[..., 1],
                 'win_probability': win_prediction.squeeze()}
 
     def calculate_loss(self, batch):

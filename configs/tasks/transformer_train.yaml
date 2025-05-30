@@ -28,16 +28,16 @@ TransformerTrain:
     mask_handler:
       _target_: chess_gnn.bert.TransformerMaskHandler
       masking_ratio: &masking_ratio
-        0.25
+        0.60
     optimizer_factory:
       _target_: chess_gnn.optimizers.LambFactory
-      learning_rate: 1e-3
+      learning_rate: 5e-4
       weight_decay: 1e-4
     lr_scheduler_factory:
       _target_: chess_gnn.schedules.CosineAnnealingWarmupFactory
-      T_0: 10000
-      T_mult: 2
-      warmup_steps: 1000
+      T_0: 15_000
+      T_mult: 5
+      warmup_steps: 2000
     masking_schedule:
       _target_: chess_gnn.schedules.MaskingSchedule
       start_ratio: 0.15
@@ -45,7 +45,7 @@ TransformerTrain:
       warmup_steps: 0
   datamodule:
     _target_: chess_gnn.data.ChessDataModule
-    data_directory: '/home/ray/datasets/chess/lumbras_2024_transformer'
+    data_directory: '/home/ray/datasets/chess/lumbras_2024_with_draws_transformer'
     batch_size: 1024
     num_workers: 8
     mode: 'transformer'
