@@ -29,6 +29,7 @@ MLPEngineTrain:
       _target_: chess_gnn.optimizers.LambFactory
       learning_rate: 5e-5
       weight_decay: 1e-5
+      named_params: False
     lr_scheduler_factory:
       _target_: chess_gnn.schedules.CosineAnnealingWarmupFactory
       T_0: 10000
@@ -55,6 +56,8 @@ MLPEngineTrain:
       - _target_: pytorch_lightning.callbacks.TQDMProgressBar
       - _target_: pytorch_lightning.callbacks.LearningRateMonitor
         logging_interval: 'step'
+      - _target_: chess_gnn.callbacks.TransformerFreezeCallback
+        layers_to_freeze: 4
       - _target_: pytorch_lightning.callbacks.ModelCheckpoint
         _partial_: True
         save_last: True

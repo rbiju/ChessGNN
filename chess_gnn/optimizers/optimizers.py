@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Iterable, Tuple, Optional, List
+from typing import Iterable, Tuple, Optional, List, Union
 
 import torch
 from torch.nn import Parameter
@@ -9,11 +9,12 @@ from .lamb import Lamb
 
 
 class OptimizerFactory(ABC):
-    def __init__(self):
+    def __init__(self, named_params: bool = True):
         super().__init__()
+        self._named_params = named_params
 
     @abstractmethod
-    def optimizer(self, params: Iterable[Tuple[str, Parameter]]) -> Optimizer:
+    def optimizer(self, params: Union[Iterable[Tuple[str, Parameter]], Iterable[Parameter]]) -> Optimizer:
         raise NotImplementedError
 
     @staticmethod
@@ -26,8 +27,8 @@ class OptimizerFactory(ABC):
 
 
 class AdamWFactory(OptimizerFactory):
-    def __init__(self, learning_rate: float, weight_decay: float, betas: Optional[List[float]] = None):
-        super().__init__()
+    def __init__(self, learning_rate: float, weight_decay: float, betas: Optional[List[float]] = None, named_params: bool = True):
+        super().__init__(named_params=named_params)
         self.learning_rate = learning_rate
         self.weight_decay = weight_decay
         if betas is None:
@@ -37,8 +38,10 @@ class AdamWFactory(OptimizerFactory):
                 raise ValueError("`betas` must have length 2.")
             self.betas = tuple(betas)
 
-    def optimizer(self, params: Iterable[Tuple[str, Parameter]]) -> Optimizer:
-        params = self.named_parameters_to_parameters(params)
+    def optimizer(self, params: Union[Iterable[Tuple[str, Parameter]], Iterable[Parameter]]) -> Optimizer:
+        if self._named_params:
+            params = self.named_parameters_to_parameters(params)
+
         return torch.optim.AdamW(params=params,
                                  lr=self.learning_rate,
                                  weight_decay=self.weight_decay,
@@ -50,8 +53,9 @@ class LambFactory(OptimizerFactory):
                  weight_decay: float = 0,
                  eps: float = 1e-6,
                  betas: Optional[List[float]] = None,
-                 adam: bool = False):
-        super().__init__()
+                 adam: bool = False,
+                 named_params: bool = True):
+        super().__init__(named_params=named_params)
         self.learning_rate = learning_rate
         self.weight_decay = weight_decay
         self.eps = eps
@@ -63,8 +67,10 @@ class LambFactory(OptimizerFactory):
                 raise ValueError("`betas` must have length 2.")
             self.betas = tuple(betas)
 
-    def optimizer(self, params: Iterable[Tuple[str, Parameter]]) -> Optimizer:
-        params = self.named_parameters_to_parameters(params)
+    def optimizer(self, params: Union[Iterable[Tuple[str, Parameter]], Iterable[Parameter]]) -> Optimizer:
+        if self._named_params:
+            params = self.named_parameters_to_parameters(params)
+
         return Lamb(params=params,
                     lr=self.learning_rate,
                     weight_decay=self.weight_decay,

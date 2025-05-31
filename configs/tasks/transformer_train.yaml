@@ -28,7 +28,7 @@ TransformerTrain:
     mask_handler:
       _target_: chess_gnn.bert.TransformerMaskHandler
       masking_ratio: &masking_ratio
-        0.60
+        0.50
     optimizer_factory:
       _target_: chess_gnn.optimizers.LambFactory
       learning_rate: 5e-4
