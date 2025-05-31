@@ -22,3 +22,11 @@ class ChessBoardPredictor:
     def get_attn_at_head_and_layer(self, chess_board: chess.Board, layer: int, head: int, get_attn: bool = True):
         out = self.single_board_forward(chess_board, get_attn=get_attn)
         return out['attns'][layer].squeeze()[head].detach().numpy()
+
+    def get_attn_at_layer(self, chess_board: chess.Board, layer: int, get_attn: bool = True):
+        out = self.single_board_forward(chess_board, get_attn=get_attn)
+        return out['attns'][layer].squeeze().detach().numpy()
+
+    def get_attn(self, chess_board: chess.Board, get_attn: bool = True):
+        out = self.single_board_forward(chess_board, get_attn=get_attn)
+        return torch.stack(out['attns']).squeeze().detach().numpy()
