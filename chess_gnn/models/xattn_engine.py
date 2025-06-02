@@ -18,22 +18,24 @@ class ChessXAttnEncoder(ChessEngineEncoder):
         self.encoder = engine.encoder
         self.from_head = engine.from_head
         self.to_head = engine.to_head
-        self.win_prediction_head = engine.win_prediction_head
 
     @property
     def dim(self):
         return self.encoder.dim
 
+    def move_prediction(self, encoder_out: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
+        from_prediction = self.from_head(encoder_out['cls'].unsqueeze(1), encoder_out['tokens'])
+        to_prediction = self.to_head(encoder_out['cls'].unsqueeze(1), encoder_out['tokens'])
+
+        return {'from': from_prediction.squeeze(),
+                'to': to_prediction.squeeze()}
+
     def forward(self, x: torch.Tensor, whose_move: torch.Tensor, get_attn: bool = False) -> dict[str, torch.Tensor]:
         out = self.encoder(x, whose_move, get_attn)
-        from_prediction = self.from_head(out['cls'].unsqueeze(1), out['tokens'])
-        to_prediction = self.to_head(out['cls'].unsqueeze(1), out['tokens'])
-        win_prediction = self.win_prediction_head(out['cls'])
+        move_prediction = self.move_prediction(out)
 
         return {**out,
-                'from': from_prediction.squeeze(),
-                'to': to_prediction.squeeze(),
-                'win_probability': win_prediction.squeeze()}
+                **move_prediction}
 
 
 class MovePredictionXAttnHead(nn.Module):
