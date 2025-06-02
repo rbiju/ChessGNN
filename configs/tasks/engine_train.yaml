@@ -2,14 +2,14 @@ EngineTrain:
   _target_: chess_gnn.tasks.EngineTrain
   checkpoint_loader:
     _target_: chess_gnn.loaders.TransformerCheckpointLoader
-    ckpt_path: "/home/ray/lightning_checkpoints/chess_transformer/d3123096-a5c1-4ab7-978a-e3bcbefdcecd/last.ckpt"
+    ckpt_path: "/home/ray/lightning_checkpoints/chess_transformer/a00fd243-e1b7-4ce3-997a-a7c39687ef09/last.ckpt"
   model:
     _target_: chess_gnn.models.ChessXAttnEngine
     _partial_: True
     decoder_layer:
       _target_: torch.nn.TransformerDecoderLayer
-      d_model: 512
-      nhead: 4
+      d_model: 384
+      nhead: 8
       dim_feedforward: 1024
       dropout: 0.0
       batch_first: True
@@ -26,7 +26,7 @@ EngineTrain:
       start_factor: 1e-8
   datamodule:
     _target_: chess_gnn.data.ChessDataModule
-    data_directory: '/home/ray/datasets/chess/lumbras_2024_with_draws_transformer'
+    data_directory: '/home/ray/datasets/chess/grandmasters_transformer'
     batch_size: 1024
     num_workers: 8
     mode: 'engine'
