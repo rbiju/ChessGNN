@@ -27,7 +27,7 @@ class ChessEnvironment(gym.Env):
         )
 
     def _get_obs(self):
-        return torch.tensor(self.tokenizer.tokenize(str(self.board)), dtype=torch.long)
+        return torch.tensor(self.tokenizer.tokenize(str(self.board)), dtype=torch.long), torch.tensor([int(not self.board.turn)], dtype=torch.long)
 
     def reset(
             self,
