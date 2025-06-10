@@ -75,7 +75,8 @@ class ChessXAttnEngine(ChessEngine):
         self.win_prediction_head = Mlp(in_dim=self.dim, out_dim=2, dropout=0.1,
                                        hidden_dim=self.dim)
 
-        self.loss_fn = nn.CrossEntropyLoss()
+        self.loss_fn = nn.CrossEntropyLoss(label_smoothing=0.1)
+        self.win_loss_fn = nn.CrossEntropyLoss()
 
         self.optimizer_factory = optimizer_factory
         self.lr_scheduler_factory = lr_scheduler_factory
@@ -125,7 +126,7 @@ class ChessXAttnEngine(ChessEngine):
         from_loss = self.loss_fn(out['from'], batch['from'])
         to_loss = self.loss_fn(out['to'], batch['to'])
 
-        win_prediction_loss = self.loss_fn(out['win_probability'], self.convert_labels_to_probs(batch['label']))
+        win_prediction_loss = self.win_loss_fn(out['win_probability'], self.convert_labels_to_probs(batch['label']))
 
         loss = (self.loss_weights.from_loss * from_loss +
                 self.loss_weights.to_loss * to_loss +

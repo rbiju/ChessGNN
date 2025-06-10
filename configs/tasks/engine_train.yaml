@@ -11,30 +11,30 @@ EngineTrain:
       d_model: 512
       nhead: 8
       dim_feedforward: 1024
-      dropout: 0.0
+      dropout: 0.
       batch_first: True
     n_decoder_layers: 3
     optimizer_factory:
       _target_: chess_gnn.optimizers.LambFactory
       learning_rate: 1e-3
-      weight_decay: 1e-6
+      weight_decay: 1e-1
       named_params: False
     lr_scheduler_factory:
       _target_: chess_gnn.schedules.CosineAnnealingWarmupFactory
       T_0: 10000
-      T_mult: 2
+      T_mult: 10
       warmup_steps: 2500
       start_factor: 1e-8
   datamodule:
     _target_: chess_gnn.data.ChessDataModule
-    data_directory: '/home/ray/datasets/chess/grandmasters_transformer'
+    data_directory: '/home/ray/datasets/chess/lumbras_2024_with_draws_transformer'
     batch_size: 1024
     num_workers: 8
     mode: 'engine'
   trainer_factory:
     _target_: chess_gnn.trainer.TrainerFactory
-    log_every_n_steps: 100
-    max_epochs: 100
+    log_every_n_steps: 250
+    max_epochs: 2
     accelerator: 'auto'
     strategy: 'ddp'
     devices: 1
@@ -51,4 +51,5 @@ EngineTrain:
       - _target_: pytorch_lightning.callbacks.ModelCheckpoint
         _partial_: True
         save_last: True
-        every_n_epochs: 10
+        every_n_train_steps: 10_000
+        save_on_train_epoch_end: True

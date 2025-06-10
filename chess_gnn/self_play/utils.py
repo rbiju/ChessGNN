@@ -1,3 +1,5 @@
+import math
+
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -20,3 +22,15 @@ class ChessEngineMoveHandler:
         move = legal_moves[np.random.choice(np.arange(len(legal_move_weights)), p=legal_move_weights)]
 
         return move
+
+
+def layer_init(
+    layer: torch.nn.Module,
+    std: float = math.sqrt(2),
+    bias_const: float = 0.0,
+    ortho_init: bool = True,
+):
+    if ortho_init:
+        torch.nn.init.orthogonal_(layer.weight, std)
+        torch.nn.init.constant_(layer.bias, bias_const)
+    return layer
