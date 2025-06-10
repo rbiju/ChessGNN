@@ -8,16 +8,17 @@ EngineTrain:
     _partial_: True
     decoder_layer:
       _target_: torch.nn.TransformerDecoderLayer
-      d_model: 384
+      d_model: 512
       nhead: 8
       dim_feedforward: 1024
       dropout: 0.0
       batch_first: True
-    n_decoder_layers: 2
+    n_decoder_layers: 3
     optimizer_factory:
       _target_: chess_gnn.optimizers.LambFactory
-      learning_rate: 5e-5
+      learning_rate: 1e-3
       weight_decay: 1e-6
+      named_params: False
     lr_scheduler_factory:
       _target_: chess_gnn.schedules.CosineAnnealingWarmupFactory
       T_0: 10000
@@ -33,7 +34,7 @@ EngineTrain:
   trainer_factory:
     _target_: chess_gnn.trainer.TrainerFactory
     log_every_n_steps: 100
-    max_epochs: 2
+    max_epochs: 100
     accelerator: 'auto'
     strategy: 'ddp'
     devices: 1
@@ -45,8 +46,9 @@ EngineTrain:
       - _target_: pytorch_lightning.callbacks.TQDMProgressBar
       - _target_: pytorch_lightning.callbacks.LearningRateMonitor
         logging_interval: 'step'
+      - _target_: chess_gnn.callbacks.TransformerFreezeCallback
+        layers_to_freeze: 9
       - _target_: pytorch_lightning.callbacks.ModelCheckpoint
         _partial_: True
         save_last: True
-        every_n_train_steps: 10_000
-        save_on_train_epoch_end: True
+        every_n_epochs: 10
