@@ -33,6 +33,10 @@ class ChessBackbone(ABC, pl.LightningModule):
     def __init__(self):
         super().__init__()
 
+    @staticmethod
+    def squeeze_batch(batch):
+        return {key: batch[key].squeeze(0) for key in batch}
+
     @abstractmethod
     def get_encoder(self) -> ChessEncoder:
         raise NotImplementedError

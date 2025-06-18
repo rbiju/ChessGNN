@@ -153,10 +153,6 @@ class ChessTransformer(ChessBackbone):
         return ChessTransformerEncoder(self)
 
     @staticmethod
-    def squeeze_batch(batch):
-        return {key: batch[key].squeeze() for key in batch}
-
-    @staticmethod
     def norm(embedding):
         return F.normalize(embedding, p=2, dim=-1)
 
