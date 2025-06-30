@@ -163,14 +163,14 @@ class ChessTransformer(ChessBackbone):
 
         x_in = self.mask_handler.shuffle_and_mask(board, ids_shuffle, ids_restore, len_keep)
 
-        x_in = self.embedding_table[x_in] + self.pos_embedding.unsqueeze(0)
+        x_in = self.embedding_table[x_in] + self.norm(self.pos_embedding.unsqueeze(0))
 
         x_in = x_in + self.whose_move_embedding[whose_move].unsqueeze(1)
-        decoder_in = self.mask_handler.get_masked_embeddings(x_in, ids_mask)
-        encoder_in = self.mask_handler.get_unmasked_embeddings(x_in, ids_keep)
+        decoder_in = self.norm(self.mask_handler.get_masked_embeddings(x_in, ids_mask))
+        encoder_in = self.norm(self.mask_handler.get_unmasked_embeddings(x_in, ids_keep))
 
-        cls_token = (cls_token.unsqueeze(0).expand(x_in.size(0), -1, -1) +
-                     self.whose_move_embedding[whose_move].unsqueeze(1))
+        cls_token = self.norm(cls_token.unsqueeze(0).expand(x_in.size(0), -1, -1) +
+                              self.whose_move_embedding[whose_move].unsqueeze(1))
         encoder_in = torch.cat([cls_token, encoder_in], dim=1)
         encoder_out = self.encoder(encoder_in)
 
@@ -179,13 +179,13 @@ class ChessTransformer(ChessBackbone):
         return {'cls': self.norm(encoder_out['cls']).unsqueeze(1),
                 'tokens': self.norm(encoder_out['tokens']),
                 'labels': masked_labels,
-                'decoder_in': self.norm(decoder_in)}
+                'decoder_in': decoder_in}
 
-    def decode(self, cls_token: torch.Tensor, decoder_in: torch.Tensor):
+    def decode(self, context: torch.Tensor, decoder_in: torch.Tensor):
         decoder_in = self.connector(decoder_in)
-        cls_token = self.connector(cls_token)
+        context = self.connector(context)
 
-        decoder_out = self.decoder(decoder_in, cls_token)
+        decoder_out = self.decoder(decoder_in, context)
         decoder_out = self.mlm_head(decoder_out)
         return einops.rearrange(decoder_out, 'b l c -> b c l')
 
@@ -194,12 +194,17 @@ class ChessTransformer(ChessBackbone):
 
         # mask is shared by current and next boards
         ids_shuffle, ids_restore, len_keep = self.mask_handler.get_mask(batch['board'])
-        current_board_encoded = self.encode(batch['board'], batch['whose_move'], self.current_board_cls_token, ids_shuffle, ids_restore, len_keep)
-        next_board_encoded = self.encode(batch['next_board'], torch.logical_not(batch['whose_move']).long(), self.next_board_cls_token,
+        current_board_encoded = self.encode(batch['board'], batch['whose_move'], self.current_board_cls_token,
+                                            ids_shuffle, ids_restore, len_keep)
+        next_board_encoded = self.encode(batch['next_board'], torch.logical_not(batch['whose_move']).long(),
+                                         self.next_board_cls_token,
                                          ids_shuffle, ids_restore, len_keep)
 
-        current_board_preds = self.decode(next_board_encoded['cls'], current_board_encoded['decoder_in'])
-        next_board_preds = self.decode(current_board_encoded['cls'], next_board_encoded['decoder_in'])
+        current_board_context = torch.cat([current_board_encoded['cls'], current_board_encoded['tokens']], dim=1)
+        next_board_context = torch.cat([next_board_encoded['cls'], next_board_encoded['tokens']], dim=1)
+
+        current_board_preds = self.decode(next_board_context, current_board_encoded['decoder_in'])
+        next_board_preds = self.decode(current_board_context, next_board_encoded['decoder_in'])
 
         current_board_loss = self.masking_loss(current_board_preds, current_board_encoded['labels'])
         next_board_loss = self.masking_loss(next_board_preds, next_board_encoded['labels'])
@@ -214,14 +219,17 @@ class ChessTransformer(ChessBackbone):
 
         # mask is shared by current and next boards
         ids_shuffle, ids_restore, len_keep = self.mask_handler.get_mask(batch['board'])
-        current_board_encoded = self.encode(batch['board'], batch['whose_move'], self.current_board_cls_token, ids_shuffle, ids_restore, len_keep)
-        next_board_encoded = self.encode(batch['next_board'], torch.logical_not(batch['whose_move']).long(), self.next_board_cls_token,
+        current_board_encoded = self.encode(batch['board'], batch['whose_move'], self.current_board_cls_token,
+                                            ids_shuffle, ids_restore, len_keep)
+        next_board_encoded = self.encode(batch['next_board'], torch.logical_not(batch['whose_move']).long(),
+                                         self.next_board_cls_token,
                                          ids_shuffle, ids_restore, len_keep)
 
         current_board_preds = self.decode(next_board_encoded['cls'], current_board_encoded['decoder_in'])
         next_board_preds = self.decode(current_board_encoded['cls'], next_board_encoded['decoder_in'])
 
-        return {'current_board_preds': current_board_preds, 'next_board_preds': next_board_preds, 'ids_shuffle': ids_shuffle, 'len_keep': len_keep}
+        return {'current_board_preds': current_board_preds, 'next_board_preds': next_board_preds,
+                'ids_shuffle': ids_shuffle, 'len_keep': len_keep}
 
     def training_step(self, batch, batch_idx):
         step = self.global_step

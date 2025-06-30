@@ -28,11 +28,11 @@ TransformerTrain:
     mask_handler:
       _target_: chess_gnn.bert.TransformerMaskHandler
       masking_ratio: &masking_ratio
-        0.3
+        0.25
     optimizer_factory:
       _target_: chess_gnn.optimizers.LambFactory
       learning_rate: 1e-3
-      weight_decay: 1e-1
+      weight_decay: 1e-6
     lr_scheduler_factory:
       _target_: chess_gnn.schedules.CosineAnnealingWarmupFactory
       T_0: 15_000
@@ -52,7 +52,7 @@ TransformerTrain:
   trainer_factory:
     _target_: chess_gnn.trainer.TrainerFactory
     log_every_n_steps: 100
-    max_epochs: 3
+    max_epochs: 2
     accelerator: 'auto'
     strategy: 'ddp'
     devices: 1

@@ -184,4 +184,4 @@ def mlp_engine_dummy_forward():
 
 
 if __name__ == '__main__':
-    mlp_engine_dummy_forward()
+    transformer_forward()
