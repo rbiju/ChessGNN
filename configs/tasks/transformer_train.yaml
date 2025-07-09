@@ -20,19 +20,19 @@ TransformerTrain:
       decoder_layer:
         _target_: torch.nn.TransformerDecoderLayer
         batch_first: True
-        d_model: 256
+        d_model: 512
         nhead: 8
         dim_feedforward: 512
         dropout: 0.
-      num_layers: 4
+      num_layers: 2
     mask_handler:
       _target_: chess_gnn.bert.TransformerMaskHandler
       masking_ratio: &masking_ratio
-        0.25
+        0.15
     optimizer_factory:
       _target_: chess_gnn.optimizers.LambFactory
       learning_rate: 1e-3
-      weight_decay: 1e-6
+      weight_decay: 1e-4
     lr_scheduler_factory:
       _target_: chess_gnn.schedules.CosineAnnealingWarmupFactory
       T_0: 15_000
@@ -43,6 +43,9 @@ TransformerTrain:
       start_ratio: 0.15
       end_ratio: *masking_ratio
       warmup_steps: 0
+    square_weights:
+      _target_: chess_gnn.models.SquareWeights
+      no_weights: True
   datamodule:
     _target_: chess_gnn.data.ChessDataModule
     data_directory: '/home/ray/datasets/chess/lumbras_2024_with_draws_transformer'

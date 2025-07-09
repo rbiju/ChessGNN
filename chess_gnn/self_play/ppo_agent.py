@@ -1,24 +1,19 @@
-import math
-
-import gymnasium as gym
+import pytorch_lightning as pl
 import torch
 import torch.nn.functional as F
 from torch import Tensor
 from torch.distributions import Categorical
 from torchmetrics import MeanMetric
 
-import pytorch_lightning as pl
-
+from chess_gnn.models import ChessEngineEncoder
 from .loss import policy_loss, entropy_loss, value_loss
-from .utils import layer_init
 
 
 class PPOLightningAgent(pl.LightningModule):
     def __init__(
         self,
-        envs: gym.vector.SyncVectorEnv,
-        act_fun: str = "relu",
-        ortho_init: bool = False,
+        actor: ChessEngineEncoder,
+        critic: torch.nn.Module,
         vf_coef: float = 1.0,
         ent_coef: float = 0.0,
         clip_coef: float = 0.2,
@@ -27,37 +22,13 @@ class PPOLightningAgent(pl.LightningModule):
         **torchmetrics_kwargs,
     ):
         super().__init__()
-        if act_fun.lower() == "relu":
-            act_fun = torch.nn.ReLU()
-        elif act_fun.lower() == "tanh":
-            act_fun = torch.nn.Tanh()
-        else:
-            raise ValueError("Unrecognized activation function: `act_fun` must be either `relu` or `tanh`")
         self.vf_coef = vf_coef
         self.ent_coef = ent_coef
         self.clip_coef = clip_coef
         self.clip_vloss = clip_vloss
         self.normalize_advantages = normalize_advantages
-        self.critic = torch.nn.Sequential(
-            layer_init(
-                torch.nn.Linear(math.prod(envs.single_observation_space.shape), 64),
-                ortho_init=ortho_init,
-            ),
-            act_fun,
-            layer_init(torch.nn.Linear(64, 64), ortho_init=ortho_init),
-            act_fun,
-            layer_init(torch.nn.Linear(64, 1), std=1.0, ortho_init=ortho_init),
-        )
-        self.actor = torch.nn.Sequential(
-            layer_init(
-                torch.nn.Linear(math.prod(envs.single_observation_space.shape), 64),
-                ortho_init=ortho_init,
-            ),
-            act_fun,
-            layer_init(torch.nn.Linear(64, 64), ortho_init=ortho_init),
-            act_fun,
-            layer_init(torch.nn.Linear(64, envs.single_action_space.n), std=0.01, ortho_init=ortho_init),
-        )
+        self.critic = critic
+        self.actor = actor
         self.avg_pg_loss = MeanMetric(**torchmetrics_kwargs)
         self.avg_value_loss = MeanMetric(**torchmetrics_kwargs)
         self.avg_ent_loss = MeanMetric(**torchmetrics_kwargs)
