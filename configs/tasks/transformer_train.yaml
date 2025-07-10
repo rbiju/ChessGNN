@@ -20,7 +20,7 @@ TransformerTrain:
       decoder_layer:
         _target_: torch.nn.TransformerDecoderLayer
         batch_first: True
-        d_model: 512
+        d_model: 384
         nhead: 8
         dim_feedforward: 512
         dropout: 0.

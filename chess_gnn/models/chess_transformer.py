@@ -169,14 +169,14 @@ class ChessTransformer(ChessBackbone):
 
         x_in = self.mask_handler.shuffle_and_mask(board, ids_shuffle, ids_restore, len_keep)
 
-        x_in = self.norm(self.embedding_table)[x_in] + self.norm(self.pos_embedding).unsqueeze(0)
+        x_in = self.norm(self.embedding_table[x_in] + self.pos_embedding.unsqueeze(0) + self.whose_move_embedding[
+            whose_move].unsqueeze(1))
 
-        x_in = x_in + self.norm(self.whose_move_embedding)[whose_move].unsqueeze(1)
         decoder_in = self.mask_handler.get_masked_embeddings(x_in, ids_mask)
         encoder_in = self.mask_handler.get_unmasked_embeddings(x_in, ids_keep)
 
-        cls_token = (self.norm(cls_token).unsqueeze(0).expand(x_in.size(0), -1, -1) +
-                     self.norm(self.whose_move_embedding)[whose_move].unsqueeze(1))
+        cls_token = self.norm(
+            cls_token.unsqueeze(0).expand(x_in.size(0), -1, -1) + self.whose_move_embedding[whose_move].unsqueeze(1))
         encoder_in = torch.cat([cls_token, encoder_in], dim=1)
         encoder_out = self.encoder(encoder_in)
 
