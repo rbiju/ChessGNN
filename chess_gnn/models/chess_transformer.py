@@ -34,17 +34,17 @@ class ChessTransformerEncoder(ChessEncoder):
         return F.normalize(embedding, p=2, dim=-1)
 
     def forward(self, x: torch.Tensor, whose_move: torch.Tensor, get_attn: bool = False) -> dict[str, torch.Tensor]:
-        x_ = self.embeddings[x]
-        x_ = x_ + self.pos_emb.unsqueeze(0)
-        cls_token = self.cls_token.unsqueeze(0).expand(x_.size(0), -1, -1)
-        x_ = torch.cat([cls_token, x_], dim=1)
-        x_ = x_ + self.whose_move[whose_move].unsqueeze(1)
+        cls_token = self.cls_token.unsqueeze(0).expand(x.size(0), -1, -1)
+        x_in = torch.cat([cls_token, self.embedding_table[x]], dim=1)
 
-        out = self.encoder(x_, get_attn=get_attn)
-        out['cls'] = self.norm(out['cls'])
-        out['tokens'] = self.norm(out['tokens'])
+        x_in = (self.norm(x_in) +
+                self.norm(self.pos_embedding.unsqueeze(0)) +
+                self.norm(self.whose_move_embedding[whose_move].unsqueeze(1)))
 
-        return out
+        out = self.encoder(x_in, get_attn=get_attn)
+
+        return {'cls': out[:, :1, :].squeeze(1),
+                'tokens': out[:, 1:, :]}
 
 
 @dataclass
@@ -113,7 +113,7 @@ class ChessTransformer(ChessBackbone):
         self.next_board_cls_token = nn.Parameter(torch.empty(1, self.dim))
         self.embedding_table = torch.nn.Parameter(torch.empty(tokenizer.vocab_size + 1, self.dim))
         self.whose_move_embedding = nn.Parameter(torch.empty(2, self.dim))
-        self.pos_embedding = nn.Parameter(torch.empty(64, self.dim))
+        self.pos_embedding = nn.Parameter(torch.empty(65, self.dim))
 
         if self.dim != self.decoder_dim:
             self.connector = nn.Sequential(nn.LayerNorm(self.dim), nn.Linear(self.dim, self.decoder_dim), nn.GELU())
@@ -145,6 +145,8 @@ class ChessTransformer(ChessBackbone):
             self.embedding_table.copy_(F.normalize(self.embedding_table, dim=-1))
             self.current_board_cls_token.copy_(F.normalize(self.current_board_cls_token, dim=-1))
             self.next_board_cls_token.copy_(F.normalize(self.next_board_cls_token, dim=-1))
+            self.pos_embedding.copy_(F.normalize(self.pos_embedding, dim=-1))
+            self.whose_move_embedding.copy_(F.normalize(self.whose_move_embedding, dim=-1))
 
         self.apply(self._init_weights)
 
@@ -168,21 +170,24 @@ class ChessTransformer(ChessBackbone):
 
         x_in = self.mask_handler.shuffle_and_mask(board, ids_shuffle, ids_restore, len_keep)
 
-        x_in = self.norm(self.embedding_table[x_in] + self.pos_embedding.unsqueeze(0) + self.whose_move_embedding[
-            whose_move].unsqueeze(1))
+        cls_token = cls_token.unsqueeze(0).expand(x_in.size(0), -1, -1)
+        x_in = torch.cat([cls_token, self.embedding_table[x_in]], dim=1)
 
-        decoder_in = self.mask_handler.get_masked_embeddings(x_in, ids_mask)
-        encoder_in = self.mask_handler.get_unmasked_embeddings(x_in, ids_keep)
+        x_in = (self.norm(x_in) +
+                self.norm(self.pos_embedding.unsqueeze(0)) +
+                self.norm(self.whose_move_embedding[whose_move].unsqueeze(1)))
 
-        cls_token = self.norm(
-            cls_token.unsqueeze(0).expand(x_in.size(0), -1, -1) + self.whose_move_embedding[whose_move].unsqueeze(1))
+        decoder_in = self.mask_handler.get_masked_embeddings(x_in[:, 1:, :], ids_mask)
+        encoder_in = self.mask_handler.get_unmasked_embeddings(x_in[:, 1:, :], ids_keep)
+        cls_token = x_in[:, :1, :]
+
         encoder_in = torch.cat([cls_token, encoder_in], dim=1)
         encoder_out = self.encoder(encoder_in)
 
         masked_labels = self.mask_handler.get_masked_tokens(board, ids_mask)
 
-        return {'cls': encoder_out['cls'].unsqueeze(1),
-                'tokens': encoder_out['tokens'],
+        return {'cls': encoder_out[:, :1, :],
+                'tokens': encoder_out[:, 1:, :],
                 'labels': masked_labels,
                 'decoder_in': decoder_in}
 
