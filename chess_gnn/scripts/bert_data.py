@@ -131,9 +131,9 @@ def transformer_dummy_forward():
 
 
 def test_data():
-    file = '/Users/ray/Datasets/chess/test_transformer/test/data.h5'
+    file = '/Users/ray/Datasets/chess/Carlsen_transformer/test/data.h5'
     dataset = HDF5ChessDataset(str(file), 4, mode='transformer')
-    dl = DataLoader(dataset, batch_size=1, num_workers=1, shuffle=True, persistent_workers=True, pin_memory=True)
+    dl = DataLoader(dataset, batch_size=1, num_workers=1, shuffle=False)
 
     batch = next(iter(dl))
 
@@ -184,4 +184,4 @@ def mlp_engine_dummy_forward():
 
 
 if __name__ == '__main__':
-    transformer_forward()
+    transformer_dummy_forward()

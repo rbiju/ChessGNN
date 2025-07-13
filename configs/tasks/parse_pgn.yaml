@@ -1,21 +1,15 @@
 ParsePGN:
   _target_: chess_gnn.tasks.ParsePGN
   include_draw: True
-  pgn_files:
-    - '/Users/ray/datasets/chess/Carlsen.pgn'
-    - '/Users/ray/Datasets/chess/Andreikin.pgn'
-    - '/Users/ray/Datasets/chess/Gukesh.pgn'
-    - '/Users/ray/Datasets/chess/VachierLagrave.pgn'
-    - '/Users/ray/Datasets/chess/Nakamura.pgn'
+  shuffle: False
   parser:
     _target_: chess_gnn.data_creation.TransformerDatasetCreator
-    _partial_: True
-    data_directory: '/Users/ray/datasets/chess/grandmasters'
+    pgn_file: '/Users/ray/Datasets/chess/Carlsen.pgn'
     split:
       _target_: chess_gnn.data_creation.Split
-      train: 0.9
-      val: 0.05
-      test: 0.05
+      train: 0.0
+      val: 0.0
+      test: 1.0
   writer:
     _target_: chess_gnn.data_creation.TransformerHDF5DatasetBuilder
     chunk_size: 1024

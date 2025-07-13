@@ -4,17 +4,19 @@ TransformerTrain:
   model:
     _target_: chess_gnn.models.ChessTransformer
     encoder:
-      _target_: chess_gnn.models.ChessDiscriminator
+      _target_: torch.nn.TransformerEncoder
       num_layers: 10
-      block:
-        _target_: chess_gnn.bert.TransformerBlock
-        pos_emb_mode: "learned"
-        hidden: 512
-        attn_heads: 8
-        feed_forward_hidden: 2048
+      encoder_layer:
+        _target_: torch.nn.TransformerEncoderLayer
+        batch_first: True
+        d_model: &encoder_dim
+          512
+        nhead: 8
+        dim_feedforward: 2048
         dropout: 0.
-        norm_factory:
-          _target_: chess_gnn.bert.utils.LayerNormFactory
+      norm:
+        _target_: torch.nn.LayerNorm
+        normalized_shape: *encoder_dim
     decoder:
       _target_: torch.nn.TransformerDecoder
       decoder_layer:
@@ -55,9 +57,9 @@ TransformerTrain:
   trainer_factory:
     _target_: chess_gnn.trainer.TrainerFactory
     log_every_n_steps: 100
-    max_epochs: 2
+    max_steps: 20_000
     accelerator: 'auto'
-    strategy: 'ddp'
+    strategy: 'default'
     devices: 1
     precision: "bf16-mixed"
     val_check_interval: 2000
@@ -69,6 +71,7 @@ TransformerTrain:
         logging_interval: 'step'
       - _target_: pytorch_lightning.callbacks.ModelCheckpoint
         _partial_: True
-        save_last: True
-        every_n_train_steps: 10_000
-        save_on_train_epoch_end: True
+        monitor: 'loss'
+        model: 'min'
+        save_top_k: 2
+        every_n_train_steps: 4_000

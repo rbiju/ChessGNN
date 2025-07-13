@@ -13,7 +13,6 @@ from chess_gnn.schedules import LRSchedulerFactory, MaskingSchedule
 from chess_gnn.optimizers import OptimizerFactory
 from chess_gnn.tokenizers import ChessTokenizer, SimpleChessTokenizer
 from .base import ChessBackbone, ChessEncoder
-from .chess_electra import ChessDiscriminator
 
 
 class ChessTransformerEncoder(ChessEncoder):
@@ -93,7 +92,7 @@ class SquareWeights:
 
 @HydraConfigurable
 class ChessTransformer(ChessBackbone):
-    def __init__(self, encoder: ChessDiscriminator,
+    def __init__(self, encoder: nn.TransformerEncoder,
                  decoder: nn.TransformerDecoder,
                  mask_handler: TransformerMaskHandler,
                  optimizer_factory: OptimizerFactory,
@@ -103,7 +102,7 @@ class ChessTransformer(ChessBackbone):
                  tokenizer: ChessTokenizer = SimpleChessTokenizer(),
                  square_weights: SquareWeights = SquareWeights()):
         super().__init__()
-        self.dim = encoder.dim
+        self.dim = encoder.layers[0].linear1.in_features
         self.decoder_dim = decoder.layers[0].linear1.in_features
 
         self.encoder = encoder

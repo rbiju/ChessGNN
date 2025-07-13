@@ -1,7 +1,6 @@
 from pathlib import Path
-from functools import partial
 import uuid
-from typing import Optional, Union
+from typing import Optional
 
 import comet_ml
 import torch
@@ -9,7 +8,7 @@ from pytorch_lightning import Trainer, seed_everything
 
 from chess_gnn.data import ChessDataModule
 from chess_gnn.trainer import TrainerFactory
-from chess_gnn.models import ChessTransformer, ChessELECTRA
+from chess_gnn.models import ChessTransformer
 
 from chess_gnn.configuration import HydraConfigurable, LocalHydraConfiguration
 from chess_gnn.tasks.base import Task, get_config_path
@@ -17,7 +16,7 @@ from chess_gnn.tasks.base import Task, get_config_path
 
 @HydraConfigurable
 class TransformerTrain(Task):
-    def __init__(self, model: Union[ChessTransformer, partial], datamodule: ChessDataModule, trainer_factory: TrainerFactory, electra_checkpoint: Optional[str] = None,
+    def __init__(self, model: ChessTransformer, datamodule: ChessDataModule, trainer_factory: TrainerFactory,
                  ckpt_path: Optional[str] = None, compile_model: bool = True):
         super().__init__()
         seed_everything(42)
@@ -27,11 +26,6 @@ class TransformerTrain(Task):
         self.compile_model = compile_model
 
         if self.ckpt_path is None:
-            if electra_checkpoint:
-                electra: ChessELECTRA = ChessELECTRA.load_from_checkpoint(checkpoint_path=electra_checkpoint)
-                discriminator = electra.discriminator
-                model = model(discriminator)
-
             self.model = model
             self.uid = str(uuid.uuid4())
 
