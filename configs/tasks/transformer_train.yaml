@@ -40,9 +40,10 @@ TransformerTrain:
       T_0: 15_000
       T_mult: 10
       warmup_steps: 1000
+      eta_min: 1e-5
     masking_schedule:
       _target_: chess_gnn.schedules.MaskingSchedule
-      start_ratio: 0.15
+      start_ratio: 0.20
       end_ratio: *masking_ratio
       warmup_steps: 0
     square_weights:
@@ -56,8 +57,8 @@ TransformerTrain:
     mode: 'transformer'
   trainer_factory:
     _target_: chess_gnn.trainer.TrainerFactory
-    log_every_n_steps: 100
-    max_steps: 20_000
+    log_every_n_steps: 250
+    max_steps: 150_000
     accelerator: 'auto'
     strategy: 'auto'
     devices: 1
@@ -74,4 +75,4 @@ TransformerTrain:
         monitor: 'loss'
         mode: 'min'
         save_top_k: 2
-        every_n_train_steps: 4_000
+        every_n_train_steps: 10_000

@@ -24,6 +24,7 @@ class ChessTransformerEncoder(ChessEncoder):
         self.whose_move = transformer.whose_move_embedding
         self.embeddings = transformer.embedding_table
         self.pos_emb = transformer.pos_embedding
+        self.token_weights = transformer.token_weights
 
     @property
     def dim(self):
@@ -37,9 +38,11 @@ class ChessTransformerEncoder(ChessEncoder):
         cls_token = self.cls_token.unsqueeze(0).expand(x.size(0), -1, -1)
         x_in = torch.cat([cls_token, self.embedding_table[x]], dim=1)
 
-        x_in = (self.norm(x_in) +
-                self.norm(self.pos_embedding.unsqueeze(0)) +
-                self.norm(self.whose_move_embedding[whose_move].unsqueeze(1)))
+        x_in = (self.token_weights[:, None, None, None] * torch.stack([self.norm(x_in) +
+                                                                       self.norm(self.pos_embedding.unsqueeze(0)) +
+                                                                       self.norm(self.whose_move_embedding[
+                                                                                     whose_move].unsqueeze(1))],
+                                                                      dim=0)).sum(dim=0)
 
         out = self.encoder(x_in, get_attn=get_attn)
 
@@ -115,6 +118,8 @@ class ChessTransformer(ChessBackbone):
         self.whose_move_embedding = nn.Parameter(torch.empty(2, self.dim))
         self.pos_embedding = nn.Parameter(torch.empty(65, self.dim))
 
+        self.token_weights = nn.Parameter(torch.ones(3))
+
         if self.dim != self.decoder_dim:
             self.connector = nn.Sequential(nn.LayerNorm(self.dim), nn.Linear(self.dim, self.decoder_dim), nn.GELU())
         else:
@@ -173,9 +178,11 @@ class ChessTransformer(ChessBackbone):
         cls_token = cls_token.unsqueeze(0).expand(x_in.size(0), -1, -1)
         x_in = torch.cat([cls_token, self.embedding_table[x_in]], dim=1)
 
-        x_in = (self.norm(x_in) +
-                self.norm(self.pos_embedding.unsqueeze(0)) +
-                self.norm(self.whose_move_embedding[whose_move].unsqueeze(1)))
+        x_in = (self.token_weights[:, None, None, None] * torch.stack([self.norm(x_in) +
+                                                                       self.norm(self.pos_embedding.unsqueeze(0)) +
+                                                                       self.norm(self.whose_move_embedding[
+                                                                                     whose_move].unsqueeze(1))],
+                                                                      dim=0)).sum(dim=0)
 
         decoder_in = self.mask_handler.get_masked_embeddings(x_in[:, 1:, :], ids_mask)
         encoder_in = self.mask_handler.get_unmasked_embeddings(x_in[:, 1:, :], ids_keep)
