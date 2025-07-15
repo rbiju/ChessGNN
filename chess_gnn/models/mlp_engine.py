@@ -33,6 +33,12 @@ class ChessMLPEngineEncoder(ChessEngineEncoder):
                 'to': F.softmax(move_predictions.squeeze()[..., 1], dim=-1),
                 'win_probability': F.softmax(win_prediction.squeeze(), dim=-1)}
 
+    def get_action_logits(self, x: torch.Tensor, whose_move: torch.Tensor) -> torch.Tensor:
+        out = self(x, whose_move)
+        move_logits = torch.outer(out['from'], out['to']).flatten()
+
+        return move_logits
+
 
 @HydraConfigurable
 class ChessMLPEngine(ChessEngine):

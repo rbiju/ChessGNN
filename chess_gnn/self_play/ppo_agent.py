@@ -1,3 +1,5 @@
+from typing import Iterable
+
 import pytorch_lightning as pl
 import torch
 import torch.nn.functional as F
@@ -6,6 +8,8 @@ from torch.distributions import Categorical
 from torchmetrics import MeanMetric
 
 from chess_gnn.models import ChessEngineEncoder
+from chess_gnn.optimizers import OptimizerFactory
+from chess_gnn.schedules import LRSchedulerFactory
 from .loss import policy_loss, entropy_loss, value_loss
 
 
@@ -14,6 +18,8 @@ class PPOLightningAgent(pl.LightningModule):
         self,
         actor: ChessEngineEncoder,
         critic: torch.nn.Module,
+        optimizer_factory: OptimizerFactory,
+        lr_scheduler_factory: LRSchedulerFactory,
         vf_coef: float = 1.0,
         ent_coef: float = 0.0,
         clip_coef: float = 0.2,
@@ -33,28 +39,31 @@ class PPOLightningAgent(pl.LightningModule):
         self.avg_value_loss = MeanMetric(**torchmetrics_kwargs)
         self.avg_ent_loss = MeanMetric(**torchmetrics_kwargs)
 
-    def get_action(self, x: Tensor, action: Tensor = None) -> tuple[Tensor, Tensor, Tensor]:
-        logits = self.actor(x)
+        self.optimizer_factory = optimizer_factory
+        self.lr_scheduler_factory = lr_scheduler_factory
+
+    def get_action(self, board: Tensor, whose_move: Tensor, action: Tensor = None) -> tuple[Tensor, Tensor, Tensor]:
+        logits = self.actor.get_action_logits(board, whose_move)
         distribution = Categorical(logits=logits)
         if action is None:
             action = distribution.sample()
         return action, distribution.log_prob(action), distribution.entropy()
 
-    def get_greedy_action(self, x: Tensor) -> Tensor:
-        logits = self.actor(x)
+    def get_greedy_action(self, board: Tensor, whose_move: Tensor) -> Tensor:
+        logits = self.actor.get_action_logits(board, whose_move)
         probs = F.softmax(logits, dim=-1)
         return torch.argmax(probs, dim=-1)
 
-    def get_value(self, x: Tensor) -> Tensor:
-        return self.critic(x)
+    def get_value(self, board: Tensor, whose_move: Tensor) -> Tensor:
+        return self.critic(board, whose_move)
 
-    def get_action_and_value(self, x: Tensor, action: Tensor = None) -> tuple[Tensor, Tensor, Tensor, Tensor]:
-        action, log_prob, entropy = self.get_action(x, action)
-        value = self.get_value(x)
+    def get_action_and_value(self, board: Tensor, whose_move: Tensor, action: Tensor = None) -> tuple[Tensor, Tensor, Tensor, Tensor]:
+        action, log_prob, entropy = self.get_action(board, action)
+        value = self.get_value(board, whose_move)
         return action, log_prob, entropy, value
 
-    def forward(self, x: Tensor, action: Tensor = None) -> tuple[Tensor, Tensor, Tensor, Tensor]:
-        return self.get_action_and_value(x, action)
+    def forward(self, x: Tensor, whose_move: Tensor, action: Tensor = None) -> tuple[Tensor, Tensor, Tensor, Tensor]:
+        return self.get_action_and_value(x, whose_move, action)
 
     @torch.no_grad()
     def estimate_returns_and_advantages(
@@ -122,5 +131,22 @@ class PPOLightningAgent(pl.LightningModule):
         self.avg_value_loss.reset()
         self.avg_ent_loss.reset()
 
-    def configure_optimizers(self, lr: float):
-        return torch.optim.Adam(self.parameters(), lr=lr, eps=1e-4)
+    @staticmethod
+    def configure_optimizer_from_params(params: Iterable[tuple[str, torch.nn.Parameter]],
+                                        optimizer_factory: OptimizerFactory,
+                                        scheduler_factory: LRSchedulerFactory):
+        if optimizer_factory is None or scheduler_factory is None:
+            raise RuntimeError('Optimizer and scheduler must be set for training')
+
+        optimizer = optimizer_factory.optimizer(params=params)
+        scheduler = scheduler_factory.scheduler(optimizer=optimizer)
+
+        optimizer_config = {"optimizer": optimizer}
+        optimizer_config.update(scheduler_factory.scheduler_config(scheduler=scheduler))
+
+        return optimizer_config
+
+    def configure_optimizers(self):
+        return self.configure_optimizer_from_params(self.named_parameters(),
+                                                    self.optimizer_factory,
+                                                    self.lr_scheduler_factory)

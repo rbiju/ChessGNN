@@ -37,6 +37,12 @@ class ChessXAttnEncoder(ChessEngineEncoder):
         return {**out,
                 **move_prediction}
 
+    def get_action_logits(self, x: torch.Tensor, whose_move: torch.Tensor) -> torch.Tensor:
+        move_predictions = self(x, whose_move)
+        move_logits = torch.outer(move_predictions['from'], move_predictions['to']).flatten()
+
+        return move_logits
+
 
 class MovePredictionXAttnHead(nn.Module):
     def __init__(self, in_dim: int, decoder_layer: nn.TransformerDecoderLayer, num_layers: int, out_dim: int = 64):

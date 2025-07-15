@@ -21,9 +21,9 @@ class ChessTransformerEncoder(ChessEncoder):
         self.encoder = transformer.encoder
 
         self.cls_token = transformer.current_board_cls_token
-        self.whose_move = transformer.whose_move_embedding
-        self.embeddings = transformer.embedding_table
-        self.pos_emb = transformer.pos_embedding
+        self.whose_move_embedding = transformer.whose_move_embedding
+        self.embedding_table = transformer.embedding_table
+        self.pos_embedding = transformer.pos_embedding
         self.token_weights = transformer.token_weights
 
     @property
@@ -35,6 +35,7 @@ class ChessTransformerEncoder(ChessEncoder):
         return F.normalize(embedding, p=2, dim=-1)
 
     def forward(self, x: torch.Tensor, whose_move: torch.Tensor, get_attn: bool = False) -> dict[str, torch.Tensor]:
+        # expects a batch of boards: x.shape() = b 64
         cls_token = self.cls_token.unsqueeze(0).expand(x.size(0), -1, -1)
         x_in = torch.cat([cls_token, self.embedding_table[x]], dim=1)
 
@@ -83,8 +84,8 @@ PieceWeights = TypedDict('PieceWeights', {
 class SquareWeights:
     def __init__(self, weight_dict: Optional[PieceWeights] = None, no_weights: bool = False):
         if weight_dict is None:
-            weight_dict = {'.': 0.1, 'B': 1.0, 'K': 2.0, 'N': 1.0, 'P': 0.2, 'Q': 1.5, 'R': 1.0, 'b': 1.0,
-                           'k': 2.0, 'n': 1.0, 'p': 0.2, 'q': 1.5, 'r': 1.0}
+            weight_dict = {'.': 0.5, 'B': 1.0, 'K': 2.0, 'N': 1.0, 'P': 0.75, 'Q': 1.5, 'R': 1.0, 'b': 1.0,
+                           'k': 2.0, 'n': 1.0, 'p': 0.75, 'q': 1.5, 'r': 1.0}
         if no_weights:
             weight_dict = {'.': 1.0, 'B': 1.0, 'K': 1.0, 'N': 1.0, 'P': 1.0, 'Q': 1.0, 'R': 1.0, 'b': 1.0,
                            'k': 1.0, 'n': 1.0, 'p': 1.0, 'q': 1.0, 'r': 1.0}
@@ -118,12 +119,7 @@ class ChessTransformer(ChessBackbone):
         self.whose_move_embedding = nn.Parameter(torch.empty(2, self.dim))
         self.pos_embedding = nn.Parameter(torch.empty(65, self.dim))
 
-        self.token_weights = nn.Parameter(torch.ones(3))
-
-        if self.dim != self.decoder_dim:
-            self.connector = nn.Sequential(nn.LayerNorm(self.dim), nn.Linear(self.dim, self.decoder_dim), nn.GELU())
-        else:
-            self.connector = nn.Identity()
+        self.connector = nn.Sequential(nn.LayerNorm(self.dim), nn.Linear(self.dim, self.decoder_dim), nn.GELU())
 
         self.decoder_norm = nn.LayerNorm(self.decoder_dim)
         self.mlm_head = nn.Linear(self.decoder_dim, tokenizer.vocab_size)
@@ -178,11 +174,9 @@ class ChessTransformer(ChessBackbone):
         cls_token = cls_token.unsqueeze(0).expand(x_in.size(0), -1, -1)
         x_in = torch.cat([cls_token, self.embedding_table[x_in]], dim=1)
 
-        x_in = (self.token_weights[:, None, None, None] * torch.stack([self.norm(x_in) +
-                                                                       self.norm(self.pos_embedding.unsqueeze(0)) +
-                                                                       self.norm(self.whose_move_embedding[
-                                                                                     whose_move].unsqueeze(1))],
-                                                                      dim=0)).sum(dim=0)
+        x_in = (self.norm(x_in) +
+                self.norm(self.pos_embedding.unsqueeze(0)) +
+                self.norm(self.whose_move_embedding[whose_move].unsqueeze(1)))
 
         decoder_in = self.mask_handler.get_masked_embeddings(x_in[:, 1:, :], ids_mask)
         encoder_in = self.mask_handler.get_unmasked_embeddings(x_in[:, 1:, :], ids_keep)

@@ -13,7 +13,7 @@ class ChessBoardPredictor:
 
     def single_board_forward(self, chess_board: chess.Board, get_attn: bool = False):
         board_tokens, whose_move = self.tokenizer.tokenize_board(chess_board)
-        return self.encoder(board_tokens, whose_move, get_attn=get_attn)
+        return self.encoder(board_tokens.unsqueeze(0), whose_move.unsqueeze(0), get_attn=get_attn)
 
     def get_attn_at_head_and_layer(self, chess_board: chess.Board, layer: int, head: int, get_attn: bool = True):
         out = self.single_board_forward(chess_board, get_attn=get_attn)

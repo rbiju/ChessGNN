@@ -38,7 +38,10 @@ class ChessEnvironment(gym.Env):
         self.board.reset()
         return self._get_obs(), {}
 
-    def step(self, action: dict[str, torch.Tensor],
+    def decode_action(self, action: torch.Tensor):
+        pass
+
+    def step(self, action: torch.Tensor,
              ) -> tuple[ObsType, SupportsFloat, bool, bool, dict[str, Any]]:
         move_selector = ChessEngineMoveHandler(action)
         move = move_selector.select_move(list(self.board.legal_moves))

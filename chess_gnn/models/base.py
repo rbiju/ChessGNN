@@ -28,6 +28,10 @@ class ChessEngineEncoder(ChessEncoder):
     def forward(self, x: torch.Tensor, whose_move: torch.Tensor, get_attn: bool = False) -> dict[str, torch.Tensor]:
         raise NotImplementedError
 
+    @abstractmethod
+    def get_action_logits(self, x: torch.Tensor, whose_move: torch.Tensor) -> torch.Tensor:
+        raise NotImplementedError
+
 
 class ChessBackbone(ABC, pl.LightningModule):
     def __init__(self):
