@@ -104,7 +104,8 @@ class ChessTransformer(ChessBackbone):
                  masking_schedule: MaskingSchedule,
                  loss_weights: TransformerLossWeights = TransformerLossWeights(),
                  tokenizer: ChessTokenizer = SimpleChessTokenizer(),
-                 square_weights: SquareWeights = SquareWeights()):
+                 square_weights: SquareWeights = SquareWeights(),
+                 from_pretrained: bool = False,):
         super().__init__()
         self.dim = encoder.layers[0].linear1.in_features
         self.decoder_dim = decoder.layers[0].linear1.in_features
@@ -132,7 +133,12 @@ class ChessTransformer(ChessBackbone):
         self.lr_scheduler_factory = lr_scheduler_factory
         self.masking_schedule = masking_schedule
 
-        self.initialize_weights()
+        if from_pretrained:
+            self.pretrained = True
+        else:
+            self.pretrained = False
+            self.initialize_weights()
+
         self.save_hyperparameters()
 
     def initialize_weights(self):
@@ -233,7 +239,7 @@ class ChessTransformer(ChessBackbone):
         self.log("masking_ratio", new_ratio, prog_bar=True, on_step=True)
         self.log("train_current_board_masking_loss", loss['current_board_loss'], on_step=True, sync_dist=True)
         self.log("train_next_board_loss", loss['next_board_loss'], on_step=True, sync_dist=True)
-        self.log("loss", loss['loss'], prog_bar=True, on_step=True, sync_dist=True)
+        self.log("train_all_loss", loss['loss'], prog_bar=True, on_step=True, sync_dist=True)
 
         return loss
 
@@ -242,16 +248,16 @@ class ChessTransformer(ChessBackbone):
 
         self.log("val_current_board_masking_loss", loss['current_board_loss'], sync_dist=True)
         self.log("val_next_board_loss", loss['next_board_loss'], sync_dist=True)
-        self.log("loss", loss['loss'], prog_bar=True, sync_dist=True)
+        self.log("val_all_loss", loss['loss'], prog_bar=True, sync_dist=True)
 
         return loss
 
     def test_step(self, batch, batch_idx):
         loss = self(batch)
 
-        self.log("val_current_board_masking_loss", loss['current_board_loss'], sync_dist=True)
-        self.log("val_next_board_loss", loss['next_board_loss'], sync_dist=True)
-        self.log("loss", loss['loss'], prog_bar=True, sync_dist=True)
+        self.log("test_current_board_masking_loss", loss['current_board_loss'], sync_dist=True)
+        self.log("test_next_board_loss", loss['next_board_loss'], sync_dist=True)
+        self.log("test_all_loss", loss['loss'], prog_bar=True, sync_dist=True)
 
         return loss
 

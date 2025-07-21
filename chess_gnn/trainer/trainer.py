@@ -20,7 +20,6 @@ class TrainerFactory:
                  max_epochs: int = 200,
                  log_every_n_steps: int = 250,
                  num_sanity_val_steps: int = 1,
-                 check_val_every_n_epoch=None,
                  **kwargs):
         self.accelerator = accelerator
         self.devices = devices
@@ -30,7 +29,6 @@ class TrainerFactory:
         self.max_epochs = max_epochs
         self.log_every_n_steps = log_every_n_steps
         self.num_sanity_val_steps = num_sanity_val_steps
-        self.check_val_every_n_epoch = check_val_every_n_epoch
 
         self.callbacks = kwargs.pop('callbacks', [])
         self.logger = kwargs.pop('logger', None)
@@ -64,5 +62,4 @@ class TrainerFactory:
                           max_epochs=self.max_epochs,
                           log_every_n_steps=self.log_every_n_steps,
                           num_sanity_val_steps=self.num_sanity_val_steps,
-                          check_val_every_n_epoch=self.check_val_every_n_epoch,
                           **self.kwargs)

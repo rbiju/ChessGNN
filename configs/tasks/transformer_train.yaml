@@ -30,22 +30,22 @@ TransformerTrain:
     mask_handler:
       _target_: chess_gnn.bert.TransformerMaskHandler
       masking_ratio: &masking_ratio
-        0.10
+        0.15
     optimizer_factory:
       _target_: chess_gnn.optimizers.LambFactory
-      learning_rate: 2e-3
-      weight_decay: 1e-4
+      learning_rate: 1e-3
+      weight_decay: 1e-2
     lr_scheduler_factory:
       _target_: chess_gnn.schedules.StepLRFactory
       step_size: 20_000
       interval: 'step'
-      gamma: 0.75
+      gamma: 0.90
     masking_schedule:
       _target_: chess_gnn.schedules.MaskingSchedule
       start_ratio: *masking_ratio
-      end_ratio: 0.25
-      ratio_step: 0.5
-      step: 5_000
+      end_ratio: 0.30
+      ratio_step: 0.01
+      step: 10_000
     square_weights:
       _target_: chess_gnn.models.SquareWeights
       no_weights: True
@@ -58,13 +58,13 @@ TransformerTrain:
   trainer_factory:
     _target_: chess_gnn.trainer.TrainerFactory
     log_every_n_steps: 500
-    max_steps: 150_000
+    max_steps: 175_000
     accelerator: 'auto'
     strategy: 'auto'
     devices: 1
     precision: "bf16-mixed"
     val_check_interval: 2500
-    limit_val_batches: 500
+    limit_val_batches: 2500
     num_sanity_val_steps: 10
     callbacks:
       - _target_: pytorch_lightning.callbacks.TQDMProgressBar
@@ -72,7 +72,8 @@ TransformerTrain:
         logging_interval: 'step'
       - _target_: pytorch_lightning.callbacks.ModelCheckpoint
         _partial_: True
-        monitor: 'loss'
+        monitor: 'val_all_loss'
         mode: 'min'
         save_top_k: 2
+        save_last: True
         every_n_train_steps: 10_000

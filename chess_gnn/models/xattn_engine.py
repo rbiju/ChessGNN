@@ -78,11 +78,11 @@ class ChessXAttnEngine(ChessEngine):
                                                  num_layers=n_decoder_layers)
         self.to_head = MovePredictionXAttnHead(in_dim=self.dim, decoder_layer=copy.deepcopy(decoder_layer),
                                                num_layers=n_decoder_layers)
-        self.win_prediction_head = Mlp(in_dim=self.dim, out_dim=2, dropout=0.1,
-                                       hidden_dim=self.dim)
+        self.win_prediction_head = nn.Sequential(Mlp(in_dim=self.dim, out_dim=1, dropout=0.1,
+                                                     hidden_dim=self.dim), nn.Tanh())
 
         self.loss_fn = nn.CrossEntropyLoss(label_smoothing=0.1)
-        self.win_loss_fn = nn.CrossEntropyLoss()
+        self.win_loss_fn = nn.MSELoss()
 
         self.optimizer_factory = optimizer_factory
         self.lr_scheduler_factory = lr_scheduler_factory
@@ -99,15 +99,15 @@ class ChessXAttnEngine(ChessEngine):
         return {key: batch[key].squeeze() for key in batch}
 
     @staticmethod
-    def convert_labels_to_probs(labels: torch.LongTensor) -> torch.Tensor:
+    def convert_labels_to_rewards(labels: torch.LongTensor) -> torch.Tensor:
         probs = torch.zeros((labels.size(0), 2), dtype=torch.float32, device=labels.device)
         mask_0 = labels == 0
         mask_1 = labels == 1
         mask_2 = labels == 2
 
         probs[mask_0, 0] = 1.0
-        probs[mask_1, 1] = 1.0
-        probs[mask_2] = 0.5
+        probs[mask_1, 1] = -1.0
+        probs[mask_2] = 0.0
 
         return probs
 
@@ -132,7 +132,7 @@ class ChessXAttnEngine(ChessEngine):
         from_loss = self.loss_fn(out['from'], batch['from'])
         to_loss = self.loss_fn(out['to'], batch['to'])
 
-        win_prediction_loss = self.win_loss_fn(out['win_probability'], self.convert_labels_to_probs(batch['label']))
+        win_prediction_loss = self.win_loss_fn(out['win_probability'], self.convert_labels_to_rewards(batch['label']))
 
         loss = (self.loss_weights.from_loss * from_loss +
                 self.loss_weights.to_loss * to_loss +
