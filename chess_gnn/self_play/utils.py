@@ -1,4 +1,5 @@
 import math
+from dataclasses import dataclass
 
 import numpy as np
 import torch
@@ -6,31 +7,35 @@ import torch.nn.functional as F
 from chess import Move
 
 
-class ChessEngineMoveHandler:
-    def __init__(self, predictions: dict[str, torch.Tensor]):
-        self.from_logits = F.softmax(predictions['from'], dim=-1)
-        self.to_logits = F.softmax(predictions['to'], dim=-1)
+@dataclass
+class ChessAction:
+    from_square: int
+    to_square: int
 
-    def select_move(self, legal_moves: list[Move]) -> Move:
-        move_weights = torch.outer(self.from_logits, self.to_logits).flipud()
+    def to_1d(self):
+        return self.from_square * 64 + self.to_square
 
-        legal_move_weights = []
-        for move in legal_moves:
-            legal_move_weights.append(move_weights[move.from_square][move.to_square])
-
-        legal_move_weights = np.array(legal_move_weights)
-        move = legal_moves[np.random.choice(np.arange(len(legal_move_weights)), p=legal_move_weights)]
-
-        return move
+    @classmethod
+    def from_1d(cls, idx: int) -> "ChessAction":
+        return ChessAction(from_square=idx//64, to_square=idx % 64)
 
 
-def layer_init(
-    layer: torch.nn.Module,
-    std: float = math.sqrt(2),
-    bias_const: float = 0.0,
-    ortho_init: bool = True,
-):
-    if ortho_init:
-        torch.nn.init.orthogonal_(layer.weight, std)
-        torch.nn.init.constant_(layer.bias, bias_const)
-    return layer
+@dataclass
+class PPOData:
+    board: torch.Tensor
+    whose_move: torch.Tensor
+    reward: torch.Tensor
+    action: torch.Tensor
+    log_prob: torch.Tensor = None
+    value: torch.Tensor = None
+    mask: torch.Tensor = None
+
+    def cat(self, other: "PPOData") -> "PPOData":
+        return PPOData(board=torch.cat((self.board, other.board), dim=0),
+                       whose_move=torch.cat((self.whose_move, other.whose_move), dim=0),
+                       reward=torch.cat((self.reward, other.reward), dim=0),
+                       action=torch.cat((self.action, other.action), dim=0),
+                       log_prob=torch.cat((self.log_prob, other.log_prob), dim=0),
+                       value=torch.cat((self.value, other.value), dim=0),
+                       mask=torch.cat((self.mask, other.mask), dim=0)
+                       )

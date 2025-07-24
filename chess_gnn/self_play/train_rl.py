@@ -1,6 +1,7 @@
 """
 1. Game Generation
-    a: Inference to fill deque of size n
+    a: Generate games to fill up a buffer of size n
+    b: Use this buffer to generate batches
     b: Collect boards, moves, rewards
     c: split into black, white moves and negate reward for black
 
@@ -54,15 +55,41 @@
             save_to_video(path, np.array(renders))
 
 """
-from .ppo_agent import PPOLightningAgent
+from dataclasses import dataclass
+
+import torch
+
+from .ppo_agent import PPOAgent
 from .environment import ChessEnvironment
 
 
+@dataclass
+class PPOData:
+    board: torch.Tensor
+    whose_move: torch.Tensor
+    reward: torch.Tensor
+    action: torch.Tensor
+    log_prob: torch.Tensor = None
+    value: torch.Tensor = None
+    mask: torch.Tensor = None
+
+
 class Trainer:
-    def __init__(self, agent: PPOLightningAgent, env: ChessEnvironment):
+    def __init__(self, agent: PPOAgent, env: ChessEnvironment):
         self.agent = agent
         self.env = env
 
+    def take_action(self):
+        mask = self.env.get_legal_moves_mask()
+        board, whose_move = self.env.get_obs()
+        action, log_prob, entropy, value = self.agent.get_action_and_value(board, whose_move, mask)
+        reward, done = self.env.step(action)
 
+        return done, PPOData(board, whose_move, reward, action, log_prob, value, mask)
 
-
+    def generate_game(self):
+        self.env.reset()
+        while True:
+            done, data = self.take_action()
+            if done:
+                break

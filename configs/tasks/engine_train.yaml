@@ -2,29 +2,28 @@ EngineTrain:
   _target_: chess_gnn.tasks.EngineTrain
   checkpoint_loader:
     _target_: chess_gnn.loaders.TransformerCheckpointLoader
-    ckpt_path: "/home/ray/lightning_checkpoints/chess_transformer/a00fd243-e1b7-4ce3-997a-a7c39687ef09/last.ckpt"
+    ckpt_path: "/home/ray/lightning_checkpoints/chess_transformer/823d35e0-73bf-4a93-97b5-f10bd7920567/last.ckpt"
   model:
     _target_: chess_gnn.models.ChessXAttnEngine
     _partial_: True
     decoder_layer:
       _target_: torch.nn.TransformerDecoderLayer
-      d_model: 512
+      d_model: 768
       nhead: 8
       dim_feedforward: 1024
       dropout: 0.0
       batch_first: True
-    n_decoder_layers: 3
+    n_decoder_layers: 2
     optimizer_factory:
-      _target_: chess_gnn.optimizers.LambFactory
-      learning_rate: 1e-3
-      weight_decay: 1e-1
+      _target_: chess_gnn.optimizers.AdamWFactory
+      learning_rate: 1e-4
+      weight_decay: 1e-5
       named_params: False
     lr_scheduler_factory:
-      _target_: chess_gnn.schedules.CosineAnnealingWarmupFactory
-      T_0: 10000
-      T_mult: 2
-      warmup_steps: 2500
-      start_factor: 1e-8
+      _target_: chess_gnn.schedules.StepLRFactory
+      step_size: 10_000
+      interval: 'step'
+      gamma: 0.95
   datamodule:
     _target_: chess_gnn.data.ChessDataModule
     data_directory: '/home/ray/datasets/chess/lumbras_2024_with_draws_transformer'
@@ -33,22 +32,25 @@ EngineTrain:
     mode: 'engine'
   trainer_factory:
     _target_: chess_gnn.trainer.TrainerFactory
-    log_every_n_steps: 100
-    max_epochs: 2
+    log_every_n_steps: 250
+    max_epochs: 1
     accelerator: 'auto'
     strategy: 'ddp'
     devices: 1
     precision: "bf16-mixed"
     val_check_interval: 2000
-    limit_val_batches: 250
+    limit_val_batches: 500
     num_sanity_val_steps: 10
     callbacks:
       - _target_: pytorch_lightning.callbacks.TQDMProgressBar
       - _target_: pytorch_lightning.callbacks.LearningRateMonitor
         logging_interval: 'step'
       - _target_: chess_gnn.callbacks.TransformerFreezeCallback
-        layers_to_freeze: 9
+        layers_to_freeze: 8
       - _target_: pytorch_lightning.callbacks.ModelCheckpoint
         _partial_: True
+        monitor: 'val_all_loss'
+        mode: 'min'
+        save_top_k: 2
         save_last: True
-        every_n_epochs: 10
+        every_n_train_steps: 2_500

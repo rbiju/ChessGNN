@@ -1,10 +1,11 @@
-from typing import Iterable
+from typing import Iterable, Optional
 
 import pytorch_lightning as pl
 import torch
 import torch.nn.functional as F
 from torch import Tensor
 from torch.distributions import Categorical
+from einops import reduce
 from torchmetrics import MeanMetric
 
 from chess_gnn.models import ChessEngineEncoder
@@ -13,7 +14,35 @@ from chess_gnn.schedules import LRSchedulerFactory
 from .loss import policy_loss, entropy_loss, value_loss
 
 
-class PPOLightningAgent(pl.LightningModule):
+# from this great blog post: https://boring-guy.sh/posts/masking-rl/
+class CategoricalMasked(Categorical):
+    def __init__(self, logits: torch.Tensor, mask: Optional[torch.Tensor] = None):
+        self.mask = mask
+        self.batch, self.nb_action = logits.size()
+        if mask is None:
+            super(CategoricalMasked, self).__init__(logits=logits)
+        else:
+            self.mask_value = torch.tensor(
+                torch.finfo(logits.dtype).min, dtype=logits.dtype
+            )
+            logits = torch.where(self.mask, logits, self.mask_value)
+            super(CategoricalMasked, self).__init__(logits=logits)
+
+    def entropy(self):
+        if self.mask is None:
+            return super().entropy()
+        # Elementwise multiplication
+        p_log_p = torch.einsum("ij,ij->ij", self.logits, self.probs)
+        # Compute the entropy with possible action only
+        p_log_p = torch.where(
+            self.mask,
+            p_log_p,
+            torch.tensor(0, dtype=p_log_p.dtype, device=p_log_p.device),
+        )
+        return -reduce(p_log_p, "b a -> b", "sum", b=self.batch, a=self.nb_action)
+
+
+class PPOAgent(pl.LightningModule):
     def __init__(
         self,
         actor: ChessEngineEncoder,
@@ -42,23 +71,27 @@ class PPOLightningAgent(pl.LightningModule):
         self.optimizer_factory = optimizer_factory
         self.lr_scheduler_factory = lr_scheduler_factory
 
-    def get_action(self, board: Tensor, whose_move: Tensor, action: Tensor = None) -> tuple[Tensor, Tensor, Tensor]:
+    def get_action(self, board: Tensor, whose_move: Tensor, mask: Tensor, action: Tensor = None) -> tuple[Tensor, Tensor, Tensor]:
         logits = self.actor.get_action_logits(board, whose_move)
-        distribution = Categorical(logits=logits)
+        distribution = CategoricalMasked(logits=logits, mask=mask)
         if action is None:
             action = distribution.sample()
         return action, distribution.log_prob(action), distribution.entropy()
 
-    def get_greedy_action(self, board: Tensor, whose_move: Tensor) -> Tensor:
+    def get_greedy_action(self, board: Tensor, whose_move: Tensor, mask: Tensor) -> Tensor:
         logits = self.actor.get_action_logits(board, whose_move)
+        mask_value = torch.tensor(
+            torch.finfo(logits.dtype).min, dtype=logits.dtype
+        )
+        logits = torch.where(mask, logits, mask_value)
         probs = F.softmax(logits, dim=-1)
         return torch.argmax(probs, dim=-1)
 
     def get_value(self, board: Tensor, whose_move: Tensor) -> Tensor:
         return self.critic(board, whose_move)
 
-    def get_action_and_value(self, board: Tensor, whose_move: Tensor, action: Tensor = None) -> tuple[Tensor, Tensor, Tensor, Tensor]:
-        action, log_prob, entropy = self.get_action(board, action)
+    def get_action_and_value(self, board: Tensor, whose_move: Tensor, mask: Tensor, action: Tensor = None) -> tuple[Tensor, Tensor, Tensor, Tensor]:
+        action, log_prob, entropy = self.get_action(board, whose_move, mask, action)
         value = self.get_value(board, whose_move)
         return action, log_prob, entropy, value
 

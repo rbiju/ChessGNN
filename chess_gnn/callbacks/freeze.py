@@ -4,7 +4,7 @@ from chess_gnn.models import ChessXAttnEngine
 
 
 class TransformerFreezeCallback(BaseFinetuning):
-    def __init__(self, layers_to_freeze: int = 1, encoder_str: str = 'encoder.encoder.encoder'):
+    def __init__(self, layers_to_freeze: int = 1, encoder_str: str = 'encoder.encoder.layers'):
         super().__init__()
         self.layers_to_freeze = layers_to_freeze
         self.encoder_str = encoder_str

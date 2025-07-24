@@ -35,6 +35,6 @@ class TransformerCheckpointLoader(CheckpointLoader):
         super().__init__(ckpt_path)
 
     def load(self) -> ChessBackbone:
-        model = ChessTransformer.load_from_checkpoint(self.ckpt_path)
+        model = ChessTransformer.load_from_checkpoint(self.ckpt_path, from_pretrained=True)
         return model
     

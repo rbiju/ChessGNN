@@ -47,16 +47,17 @@ class ChessXAttnEncoder(ChessEngineEncoder):
 class MovePredictionXAttnHead(nn.Module):
     def __init__(self, in_dim: int, decoder_layer: nn.TransformerDecoderLayer, num_layers: int, out_dim: int = 64):
         super().__init__()
-        self.linear_in = nn.Linear(in_dim, decoder_layer.linear1.in_features)
+        decoder_dim = decoder_layer.linear1.in_features
+        self.seq_in = nn.Sequential(nn.LayerNorm(in_dim), nn.Linear(in_dim, decoder_dim), nn.GELU())
         self.decoder = nn.TransformerDecoder(decoder_layer=decoder_layer, num_layers=num_layers)
-        self.linear_out = nn.Linear(decoder_layer.linear1.in_features, out_dim)
+        self.seq_out = nn.Sequential(nn.LayerNorm(decoder_dim), nn.Linear(decoder_dim, out_dim), nn.GELU())
 
     def forward(self, x: torch.Tensor, other: torch.Tensor) -> torch.Tensor:
-        x_ = self.linear_in(x)
-        other_ = self.linear_in(other)
+        x_ = self.seq_in(x)
+        other_ = self.seq_in(other)
 
         x_ = self.decoder(x_, other_)
-        x_ = self.linear_out(x_)
+        x_ = self.seq_out(x_)
 
         return x_
 
@@ -81,7 +82,7 @@ class ChessXAttnEngine(ChessEngine):
         self.win_prediction_head = nn.Sequential(Mlp(in_dim=self.dim, out_dim=1, dropout=0.1,
                                                      hidden_dim=self.dim), nn.Tanh())
 
-        self.loss_fn = nn.CrossEntropyLoss(label_smoothing=0.1)
+        self.loss_fn = nn.CrossEntropyLoss(label_smoothing=0.)
         self.win_loss_fn = nn.MSELoss()
 
         self.optimizer_factory = optimizer_factory
@@ -96,17 +97,17 @@ class ChessXAttnEngine(ChessEngine):
 
     @staticmethod
     def squeeze_batch(batch):
-        return {key: batch[key].squeeze() for key in batch}
+        return {key: batch[key].squeeze(0) for key in batch}
 
     @staticmethod
     def convert_labels_to_rewards(labels: torch.LongTensor) -> torch.Tensor:
-        probs = torch.zeros((labels.size(0), 2), dtype=torch.float32, device=labels.device)
+        probs = torch.zeros((labels.size(0)), dtype=torch.float32, device=labels.device)
         mask_0 = labels == 0
         mask_1 = labels == 1
         mask_2 = labels == 2
 
-        probs[mask_0, 0] = 1.0
-        probs[mask_1, 1] = -1.0
+        probs[mask_0] = 1.0
+        probs[mask_1] = -1.0
         probs[mask_2] = 0.0
 
         return probs
@@ -114,8 +115,8 @@ class ChessXAttnEngine(ChessEngine):
     def forward(self, x: torch.Tensor, whose_move: torch.Tensor) -> dict[str, torch.Tensor]:
         out = self.encoder(x, whose_move)
 
-        from_prediction = self.from_head(out['cls'].unsqueeze(1), out['tokens'])
-        to_prediction = self.to_head(out['cls'].unsqueeze(1), out['tokens'])
+        from_prediction = self.from_head(out['tokens'].mean(dim=1).unsqueeze(1), out['tokens'])
+        to_prediction = self.to_head(out['tokens'].mean(dim=1).unsqueeze(1), out['tokens'])
         win_prediction = self.win_prediction_head(out['cls'])
 
         return {'cls': out['cls'],
@@ -149,7 +150,7 @@ class ChessXAttnEngine(ChessEngine):
         self.log("train_from_loss", loss['from_loss'], on_step=True, sync_dist=True)
         self.log("train_to_loss", loss['to_loss'], on_step=True, sync_dist=True)
         self.log("train_win_prediction_loss", loss['win_prediction_loss'], on_step=True, sync_dist=True)
-        self.log("loss", loss['loss'], prog_bar=True, on_step=True, sync_dist=True)
+        self.log("train_all_loss", loss['loss'], prog_bar=True, on_step=True, sync_dist=True)
 
         return loss
 
@@ -159,7 +160,7 @@ class ChessXAttnEngine(ChessEngine):
         self.log("val_from_loss", loss['from_loss'], sync_dist=True)
         self.log("val_to_loss", loss['to_loss'], sync_dist=True)
         self.log("val_win_prediction_loss", loss['win_prediction_loss'], sync_dist=True)
-        self.log("loss", loss['loss'], prog_bar=True, sync_dist=True)
+        self.log("val_all_loss", loss['loss'], prog_bar=True, sync_dist=True)
 
         return loss
 

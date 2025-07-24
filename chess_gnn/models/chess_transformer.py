@@ -19,16 +19,14 @@ class ChessTransformerEncoder(ChessEncoder):
     def __init__(self, transformer: "ChessTransformer"):
         super().__init__()
         self.encoder = transformer.encoder
-
         self.cls_token = transformer.current_board_cls_token
         self.whose_move_embedding = transformer.whose_move_embedding
         self.embedding_table = transformer.embedding_table
         self.pos_embedding = transformer.pos_embedding
-        self.token_weights = transformer.token_weights
 
     @property
     def dim(self):
-        return self.encoder.dim
+        return self.encoder.layers[0].linear1.in_features
 
     @staticmethod
     def norm(embedding):
@@ -37,15 +35,14 @@ class ChessTransformerEncoder(ChessEncoder):
     def forward(self, x: torch.Tensor, whose_move: torch.Tensor, get_attn: bool = False) -> dict[str, torch.Tensor]:
         # expects a batch of boards: x.shape() = b 64
         cls_token = self.cls_token.unsqueeze(0).expand(x.size(0), -1, -1)
+
         x_in = torch.cat([cls_token, self.embedding_table[x]], dim=1)
 
-        x_in = (self.token_weights[:, None, None, None] * torch.stack([self.norm(x_in) +
-                                                                       self.norm(self.pos_embedding.unsqueeze(0)) +
-                                                                       self.norm(self.whose_move_embedding[
-                                                                                     whose_move].unsqueeze(1))],
-                                                                      dim=0)).sum(dim=0)
+        x_in = (self.norm(x_in) +
+                self.norm(self.pos_embedding.unsqueeze(0)) +
+                self.norm(self.whose_move_embedding[whose_move].unsqueeze(1)))
 
-        out = self.encoder(x_in, get_attn=get_attn)
+        out = self.encoder(x_in)
 
         return {'cls': out[:, :1, :].squeeze(1),
                 'tokens': out[:, 1:, :]}
