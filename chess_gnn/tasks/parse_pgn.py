@@ -12,7 +12,7 @@ from chess_gnn.tasks.base import Task, get_config_path
 
 @HydraConfigurable
 class ParsePGN(Task):
-    def __init__(self, parser: Union[BERTLichessDatasetCreator, partial], writer: HDF5DatasetBuilder, batch_size: int = 750, include_draw: bool = False, pgn_files: List[str] = None):
+    def __init__(self, parser: Union[BERTLichessDatasetCreator, partial], writer: HDF5DatasetBuilder, batch_size: int = 750, include_draw: bool = False, shuffle: bool = True, pgn_files: List[str] = None):
         super().__init__()
         self.parser = parser
         if isinstance(parser, partial):
@@ -22,16 +22,21 @@ class ParsePGN(Task):
         self.pgn_files = pgn_files
         self.batch_size = batch_size
         self.include_draw = include_draw
+        self.shuffle = shuffle
         self.writer = writer
 
     def _aggregate_shuffle_h5(self, data_folders: list[Path]):
         for data_folder in data_folders:
             print(f"Aggregating + shuffling {data_folder}")
             aggregator = BERTLichessDataAggregator(str(data_folder), batch_size=self.batch_size, include_draw=self.include_draw)
-            aggregated_path = aggregator.aggregate()
-            shuffler = BERTLichessDataShuffler(aggregated_path)
-            shuffled_file = shuffler.shuffle()
-            self.writer.write_dataset(shuffled_file)
+            aggregated_file = aggregator.aggregate()
+            if self.shuffle:
+                shuffler = BERTLichessDataShuffler(aggregated_file)
+                shuffled_file = shuffler.shuffle()
+                file = shuffled_file
+            else:
+                file = aggregated_file
+            self.writer.write_dataset(file)
 
         print("Cleaning up temporary game files")
         for data_folder in data_folders:

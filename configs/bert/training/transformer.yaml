@@ -1,35 +1,47 @@
 ChessTransformer:
   _target_: chess_gnn.models.ChessTransformer
   encoder:
-    _target_: chess_gnn.models.ChessDiscriminator
-    num_layers: 12
-    block:
-      _target_: chess_gnn.bert.TransformerBlock
-      pos_emb_mode: "learned"
-      hidden: 384
-      attn_heads: 8
-      feed_forward_hidden: 768
-      norm_factory:
-        _target_: chess_gnn.bert.utils.LayerNormFactory
+    _target_: torch.nn.TransformerEncoder
+    num_layers: 10
+    encoder_layer:
+      _target_: torch.nn.TransformerEncoderLayer
+      batch_first: True
+      d_model: &encoder_dim
+        512
+      nhead: 8
+      dim_feedforward: 2048
+      dropout: 0.
+    norm:
+      _target_: torch.nn.LayerNorm
+      normalized_shape: *encoder_dim
   decoder:
     _target_: torch.nn.TransformerDecoder
     decoder_layer:
       _target_: torch.nn.TransformerDecoderLayer
       batch_first: True
-      d_model: 256
+      d_model: 384
       nhead: 8
-      dim_feedforward: 1024
+      dim_feedforward: 512
       dropout: 0.
-    num_layers: 6
+    num_layers: 2
   mask_handler:
-    _target_: chess_gnn.bert.BlankSquareAwareTransformerMaskHandler
-    masking_ratio: 0.25
+    _target_: chess_gnn.bert.TransformerMaskHandler
+    masking_ratio: &masking_ratio
+      0.15
   optimizer_factory:
     _target_: chess_gnn.optimizers.LambFactory
     learning_rate: 1e-3
     weight_decay: 1e-4
   lr_scheduler_factory:
     _target_: chess_gnn.schedules.CosineAnnealingWarmupFactory
-    T_0: 10000
-    T_mult: 2
+    T_0: 15_000
+    T_mult: 10
     warmup_steps: 1000
+  masking_schedule:
+    _target_: chess_gnn.schedules.MaskingSchedule
+    start_ratio: 0.15
+    end_ratio: *masking_ratio
+    warmup_steps: 0
+  square_weights:
+    _target_: chess_gnn.models.SquareWeights
+    no_weights: True

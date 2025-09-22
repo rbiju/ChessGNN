@@ -1,6 +1,8 @@
 from abc import abstractmethod, ABC
 from typing import Optional
 
+import chess
+
 from chess_gnn.utils.constants import STARTING_BOARD
 
 
@@ -14,4 +16,8 @@ class ChessTokenizer(ABC):
 
     @abstractmethod
     def tokenize(self, board_str: str) -> list[float]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def tokenize_board(self, chess_board: chess.Board) -> list[float]:
         raise NotImplementedError

@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from typing import Optional
 from pathlib import Path
 from uuid import uuid4
+import torch
 
 import chess.pgn
 
@@ -126,6 +127,26 @@ class PGNBoardHelper:
             next_boards.append(board.fen())
 
         return boards, next_boards
+
+    def get_game_batch(self, tokenizer):
+        current_boards, next_boards = self.get_board_and_next_board_fens()
+        current_tensor = []
+        next_tensor = []
+        whose_move_tensor = []
+        for current, next_board in zip(current_boards, next_boards):
+            curr, whose_move = tokenizer.tokenize_board(chess.Board(fen=current))
+            nex, _ = tokenizer.tokenize_board(chess.Board(fen=next_board))
+            current_tensor.append(curr)
+            next_tensor.append(nex)
+            whose_move_tensor.append(whose_move)
+
+        current_tensor = torch.stack(current_tensor)
+        next_tensor = torch.stack(next_tensor)
+        whose_move_tensor = torch.stack(whose_move_tensor).squeeze()
+
+        return {'board': current_tensor.unsqueeze(0),
+                'next_board': next_tensor.unsqueeze(0),
+                'whose_move': whose_move_tensor.unsqueeze(0)}
 
     def result(self) -> int:
         return self.result_mapping[self.game.headers['Result']]

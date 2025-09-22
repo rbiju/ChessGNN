@@ -41,6 +41,14 @@ class HDF5DatasetBuilder:
         with open(input_file, 'r', encoding='utf-8') as f:
             total_samples = sum(1 for _ in f)
 
+        if total_samples == 0:
+            with h5py.File(output_path, 'w') as h5f:
+                h5f.create_dataset('board', shape=None, dtype='i8',)
+                h5f.create_dataset('label', shape=None, dtype='f4', )
+                h5f.create_dataset('from', shape=None, dtype='f4', )
+                h5f.create_dataset('to', shape=None, dtype='f4', )
+                h5f.create_dataset('whose_move', shape=None, dtype='i8',)
+
         with h5py.File(output_path, 'w') as h5f:
             board_ds = h5f.create_dataset('board', shape=(total_samples, self.max_len), dtype='i8',
                                           chunks=(self.chunk_size, self.max_len))
@@ -112,6 +120,17 @@ class TransformerHDF5DatasetBuilder(HDF5DatasetBuilder):
 
         with open(input_file, 'r', encoding='utf-8') as f:
             total_samples = sum(1 for _ in f)
+
+        if total_samples == 0:
+            with h5py.File(output_path, 'w') as h5f:
+                h5f.create_dataset('board', shape=None, dtype='i8',)
+                h5f.create_dataset('next_board', shape=None, dtype='i8',)
+                h5f.create_dataset('label', shape=None, dtype='f4', )
+                h5f.create_dataset('from', shape=None, dtype='f4', )
+                h5f.create_dataset('to', shape=None, dtype='f4', )
+                h5f.create_dataset('whose_move', shape=None, dtype='i8',)
+
+            return
 
         with h5py.File(output_path, 'w') as h5f:
             board_ds = h5f.create_dataset('board', shape=(total_samples, self.max_len), dtype='i8',
